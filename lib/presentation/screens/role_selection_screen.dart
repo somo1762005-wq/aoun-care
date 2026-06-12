@@ -8,19 +8,26 @@ import '../widgets/theme_language_header.dart';
 import 'father/father_dashboard.dart';
 import 'son/son_dashboard.dart';
 
-class RoleSelectionScreen extends StatelessWidget {
+class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
+
+  @override
+  State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
+}
+
+class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
+  bool _isNavigating = false;
 
   void _navigateToDashboard(BuildContext context, UserRole role) {
     if (role == UserRole.son) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const SonDashboard()),
-        (route) => false,
+            (route) => false,
       );
     } else if (role == UserRole.father) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const FatherDashboard()),
-        (route) => false,
+            (route) => false,
       );
     }
   }
@@ -33,65 +40,77 @@ class RoleSelectionScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: const ThemeLanguageHeader(titleKey: 'role_selection_title'),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16),
-              // Subtitle instruction
-              Text(
-                AppLocalization.translate('role_selection_subtitle', langCode),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 48),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
+                  Text(
+                    AppLocalization.translate('role_selection_subtitle', langCode),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 48),
 
-              // Caregiver Option (Son)
-              Expanded(
-                child: _buildRoleCard(
-                  context: context,
-                  titleKey: 'role_caregiver',
-                  icon: Icons.family_restroom_rounded,
-                  color: AppColors.primary,
-                  onTap: () async {
-                    await roleCubit.selectRole(UserRole.son);
-                    if (context.mounted) {
-                      _navigateToDashboard(context, UserRole.son);
-                    }
-                  },
-                  isDark: isDark,
-                  langCode: langCode,
-                ),
-              ),
-              const SizedBox(height: 24),
+                  // Caregiver Option (Son)
+                  Expanded(
+                    child: _buildRoleCard(
+                      context: context,
+                      titleKey: 'role_caregiver',
+                      icon: Icons.family_restroom_rounded,
+                      color: AppColors.primary,
+                      onTap: () async {
+                        if (_isNavigating) return;
+                        setState(() => _isNavigating = true);
+                        await roleCubit.selectRole(UserRole.son);
+                        if (context.mounted) {
+                          _navigateToDashboard(context, UserRole.son);
+                        }
+                      },
+                      isDark: isDark,
+                      langCode: langCode,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
-              // Elderly Option (Father)
-              Expanded(
-                child: _buildRoleCard(
-                  context: context,
-                  titleKey: 'role_elderly',
-                  icon: Icons.elderly_rounded,
-                  color: AppColors.darkNavy,
-                  onTap: () async {
-                    await roleCubit.selectRole(UserRole.father);
-                    if (context.mounted) {
-                      _navigateToDashboard(context, UserRole.father);
-                    }
-                  },
-                  isDark: isDark,
-                  langCode: langCode,
-                ),
+                  // Elderly Option (Father)
+                  Expanded(
+                    child: _buildRoleCard(
+                      context: context,
+                      titleKey: 'role_elderly',
+                      icon: Icons.elderly_rounded,
+                      color: AppColors.darkNavy,
+                      onTap: () async {
+                        if (_isNavigating) return;
+                        setState(() => _isNavigating = true);
+                        await roleCubit.selectRole(UserRole.father);
+                        if (context.mounted) {
+                          _navigateToDashboard(context, UserRole.father);
+                        }
+                      },
+                      isDark: isDark,
+                      langCode: langCode,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
               ),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
-        ),
+          if (_isNavigating)
+            Container(
+              color: Colors.black26,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+        ],
       ),
     );
   }
@@ -115,12 +134,12 @@ class RoleSelectionScreen extends StatelessWidget {
             color: isDark ? AppColors.cardDark : Colors.white,
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: isDark ? color.withValues(alpha: 0.4) : color.withValues(alpha: 0.15),
+              color: isDark ? color.withOpacity(0.4) : color.withOpacity(0.15),
               width: 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.08),
+                color: color.withOpacity(0.08),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               )
@@ -129,12 +148,11 @@ class RoleSelectionScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icon container
               Container(
                 height: 80,
                 width: 80,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  color: color.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -144,7 +162,6 @@ class RoleSelectionScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Text
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Text(

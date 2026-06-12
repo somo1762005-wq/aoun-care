@@ -20,6 +20,10 @@ class _MedicationTabState extends State<MedicationTab> {
   final List<String> _doseTimes = [];
   final _timeController = TextEditingController();
 
+  ScheduleType _scheduleType = ScheduleType.daily;
+  List<int> _selectedDays = [];
+  DateTime? _startDate;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -34,12 +38,17 @@ class _MedicationTabState extends State<MedicationTab> {
       _qtyController.text = medicine.remainingQuantity.toString();
       _doseTimes.clear();
       _doseTimes.addAll(medicine.dosagesPerDay);
+      _scheduleType = medicine.scheduleType;
+      _selectedDays = List<int>.from(medicine.selectedDays);
+      _startDate = medicine.startDate;
     } else {
       _nameController.clear();
       _qtyController.clear();
       _doseTimes.clear();
-      // default starting dose time
       _doseTimes.add('08:00');
+      _scheduleType = ScheduleType.daily;
+      _selectedDays = [];
+      _startDate = DateTime.now();
     }
 
     showModalBottomSheet(
@@ -76,15 +85,10 @@ class _MedicationTabState extends State<MedicationTab> {
                         medicine != null ? 'edit_medicine' : 'add_medicine',
                         langCode,
                       ),
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppColors.darkNavy,
-                      ),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    // Name Field
                     TextField(
                       controller: _nameController,
                       decoration: InputDecoration(
@@ -93,18 +97,57 @@ class _MedicationTabState extends State<MedicationTab> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Remaining Quantity
                     TextField(
                       controller: _qtyController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: AppLocalization.translate('initial_stock', langCode),
+                        labelText: langCode == 'ar' ? 'الكمية المتبقية في العلبة' : 'Remaining Quantity in Box',
                         prefixIcon: const Icon(Icons.inventory_2_outlined),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    
-                    // Dose timings listing
+                    const SizedBox(height: 24),
+
+                    // Advanced Scheduling Section
+                    Text(
+                      langCode == 'ar' ? 'نظام الجدولة (المنبه)' : 'Scheduling System',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 12),
+                    SegmentedButton<ScheduleType>(
+                      segments: [
+                        ButtonSegment(value: ScheduleType.daily, label: Text(langCode == 'ar' ? 'يومياً' : 'Daily')),
+                        ButtonSegment(value: ScheduleType.specificDays, label: Text(langCode == 'ar' ? 'أيام معينة' : 'Specific Days')),
+                        ButtonSegment(value: ScheduleType.alternateDays, label: Text(langCode == 'ar' ? 'يوم بعد يوم' : 'Alternate')),
+                      ],
+                      selected: {_scheduleType},
+                      onSelectionChanged: (val) => setModalState(() => _scheduleType = val.first),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_scheduleType == ScheduleType.specificDays) ...[
+                      const Text('اختر الأيام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        children: List.generate(7, (index) {
+                          final dayIndex = index + 1;
+                          final dayName = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index];
+                          final isSelected = _selectedDays.contains(dayIndex);
+                          return FilterChip(
+                            label: Text(dayName),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) _selectedDays.add(dayIndex);
+                                else _selectedDays.remove(dayIndex);
+                              });
+                            },
+                          );
+                        }),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
                     Text(
                       AppLocalization.translate('dose_times', langCode),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -116,18 +159,12 @@ class _MedicationTabState extends State<MedicationTab> {
                       children: _doseTimes.map((time) {
                         return Chip(
                           label: Text(time, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          onDeleted: () {
-                            setModalState(() {
-                              _doseTimes.remove(time);
-                            });
-                          },
+                          onDeleted: () => setModalState(() => _doseTimes.remove(time)),
                           deleteIconColor: AppColors.error,
                         );
                       }).toList(),
                     ),
                     const SizedBox(height: 12),
-                    
-                    // Add Dose time input
                     Row(
                       children: [
                         Expanded(
@@ -135,18 +172,14 @@ class _MedicationTabState extends State<MedicationTab> {
                             controller: _timeController,
                             readOnly: true,
                             decoration: InputDecoration(
-                              hintText: 'HH:MM (e.g. 14:30)',
+                              hintText: 'HH:MM',
                               prefixIcon: const Icon(Icons.alarm_add_rounded),
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.calendar_today_rounded),
                                 onPressed: () async {
-                                  final time = await showTimePicker(
-                                    context: context,
-                                    initialTime: TimeOfDay.now(),
-                                  );
+                                  final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
                                   if (time != null) {
-                                    final formatted = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-                                    _timeController.text = formatted;
+                                    setModalState(() => _timeController.text = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}');
                                   }
                                 },
                               ),
@@ -164,26 +197,15 @@ class _MedicationTabState extends State<MedicationTab> {
                             }
                           },
                           icon: const Icon(Icons.add),
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 32),
-
-                    // Actions buttons
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.of(context).pop(),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
                             child: Text(AppLocalization.translate('cancel', langCode)),
                           ),
                         ),
@@ -191,10 +213,7 @@ class _MedicationTabState extends State<MedicationTab> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
-                              if (_nameController.text.isEmpty || _qtyController.text.isEmpty || _doseTimes.isEmpty) {
-                                return;
-                              }
-                              
+                              if (_nameController.text.isEmpty || _qtyController.text.isEmpty || _doseTimes.isEmpty) return;
                               final qty = int.tryParse(_qtyController.text) ?? 0;
                               final med = Medicine(
                                 id: medicine?.id ?? const Uuid().v4(),
@@ -202,44 +221,20 @@ class _MedicationTabState extends State<MedicationTab> {
                                 dosagesPerDay: List<String>.from(_doseTimes),
                                 remainingQuantity: qty,
                                 initialQuantity: medicine?.initialQuantity ?? qty,
+                                scheduleType: _scheduleType,
+                                selectedDays: _selectedDays,
+                                startDate: _startDate ?? DateTime.now(),
                               );
-
-                              if (medicine != null) {
-                                context.read<MedicineCubit>().editMed(med);
-                              } else {
-                                context.read<MedicineCubit>().addMed(med);
-                              }
+                              if (medicine != null) context.read<MedicineCubit>().editMed(med);
+                              else context.read<MedicineCubit>().addMed(med);
                               Navigator.of(context).pop();
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              AppLocalization.translate('save', langCode),
-                              style: const TextStyle(color: Colors.white),
-                            ),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                            child: Text(AppLocalization.translate('save', langCode), style: const TextStyle(color: Colors.white)),
                           ),
                         ),
                       ],
                     ),
-                    if (medicine != null) ...[
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: () {
-                          context.read<MedicineCubit>().deleteMed(medicine.id);
-                          Navigator.of(context).pop();
-                        },
-                        icon: const Icon(Icons.delete_forever_rounded, color: AppColors.error),
-                        label: Text(
-                          AppLocalization.translate('delete', langCode),
-                          style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -257,15 +252,13 @@ class _MedicationTabState extends State<MedicationTab> {
 
     return BlocBuilder<MedicineCubit, MedicineState>(
       builder: (context, state) {
-        if (state.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        if (state.isLoading) return const Center(child: CircularProgressIndicator());
 
         return Scaffold(
           floatingActionButton: FloatingActionButton(
             onPressed: () => _showAddEditSheet(context, null),
             backgroundColor: AppColors.primary,
-            child: const Icon(Icons.add, color: Colors.white, size: 28),
+            child: const Icon(Icons.add, color: Colors.white),
           ),
           body: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -274,143 +267,37 @@ class _MedicationTabState extends State<MedicationTab> {
               children: [
                 Text(
                   AppLocalization.translate('medication_list', langCode),
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : AppColors.darkNavy,
-                  ),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: state.medicines.isEmpty
-                      ? Center(
-                          child: Text(
-                            langCode == 'ar' ? 'لا توجد أدوية مضافة حالياً' : 'No medicines added yet',
-                            style: TextStyle(color: isDark ? Colors.white60 : Colors.black45),
-                          ),
-                        )
+                      ? const Center(child: Text('لا توجد أدوية مضافة'))
                       : ListView.builder(
-                          itemCount: state.medicines.length,
-                          itemBuilder: (context, index) {
-                            final medicine = state.medicines[index];
-                            // Warning check: Stock <= threshold (3)
-                            final isLowStock = medicine.remainingQuantity <= medicine.thresholdQuantity;
+                    itemCount: state.medicines.length,
+                    itemBuilder: (context, index) {
+                      final medicine = state.medicines[index];
+                      // 3. التنبيه باللون الأحمر عند نفاذ الدواء (2 حبة أو أقل)
+                      final isLowStock = medicine.remainingQuantity <= 2;
 
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 16),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                side: BorderSide(
-                                  color: isLowStock 
-                                      ? AppColors.error.withValues(alpha: 0.4) 
-                                      : (isDark ? Colors.white10 : Colors.black12),
-                                  width: isLowStock ? 2 : 1,
-                                ),
-                              ),
-                              color: isDark ? AppColors.cardDark : Colors.white,
-                              child: InkWell(
-                                onTap: () => _showAddEditSheet(context, medicine),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Name & Stock
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              medicine.name,
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: isDark ? Colors.white : AppColors.darkNavy,
-                                              ),
-                                            ),
-                                          ),
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: isLowStock 
-                                                  ? AppColors.error.withValues(alpha: 0.12)
-                                                  : AppColors.primary.withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            child: Text(
-                                              AppLocalization.translate(
-                                                'remaining_doses',
-                                                langCode,
-                                                arguments: {'count': medicine.remainingQuantity.toString()},
-                                              ),
-                                              style: TextStyle(
-                                                color: isLowStock ? AppColors.error : AppColors.primary,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      
-                                      // Dose Schedules
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.schedule_rounded, size: 18, color: Colors.blueGrey),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              medicine.dosagesPerDay.join('  |  '),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.blueGrey,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                      // Stock low threshold warning card
-                                      if (isLowStock) ...[
-                                        const SizedBox(height: 16),
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: AppColors.error.withValues(alpha: 0.08),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          padding: const EdgeInsets.all(12),
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.warning_rounded, color: AppColors.error, size: 20),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  AppLocalization.translate(
-                                                    'stock_warning',
-                                                    langCode,
-                                                    arguments: {'name': medicine.name},
-                                                  ),
-                                                  style: const TextStyle(
-                                                    color: AppColors.error,
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ]
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isLowStock ? Colors.red : (isDark ? Colors.white10 : Colors.black12),
+                            width: isLowStock ? 2 : 1,
+                          ),
                         ),
+                        child: ListTile(
+                          onTap: () => _showAddEditSheet(context, medicine),
+                          title: Text(medicine.name, style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : null)),
+                          subtitle: Text(langCode == 'ar' ? 'المتبقي: ${medicine.remainingQuantity} حبة' : 'Stock: ${medicine.remainingQuantity}'),
+                          trailing: isLowStock ? const Icon(Icons.warning_amber_rounded, color: Colors.red) : const Icon(Icons.edit),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

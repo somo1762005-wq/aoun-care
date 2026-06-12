@@ -100,7 +100,7 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       body: BlocConsumer<AuthCubit, AuthState>(
         listener: (context, state) {
-          // الانتقال فوراً عند نجاح الـ Authenticated وبدون أي شروط تحقق ميتة
+          // الانتقال فوراً عند نجاح الـ Authenticated
           if (state is AuthAuthenticated) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(

@@ -50,7 +50,7 @@ class SonDashboard extends StatelessWidget {
             builder: (context, medState) {
               return Column(
                 children: [
-                  // Real-time Escalation Alert Banner
+                  // 1. تنبيه فوري لواجهة الابن عند انتهاء مهلة الأب
                   if (medState.isSonAlertActive)
                     Container(
                       color: AppColors.error,
@@ -62,8 +62,8 @@ class SonDashboard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               langCode == 'ar'
-                                  ? '⚠️ تنبيه: لم يؤكد الأب تناول دواء (${medState.activeAlarmMedicine?.name})!'
-                                  : '⚠️ Alert: Father did not confirm taking (${medState.activeAlarmMedicine?.name})!',
+                                  ? ' تحذير: كبير السن لم يأخذ الجرعة في الوقت المحدد!'
+                                  : ' Alert: Father did not confirm taking the dose on time!',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -71,6 +71,7 @@ class SonDashboard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          // 2. زر الاستجابة لإيقاف التصعيد (الـ SMS)
                           ElevatedButton(
                             onPressed: () {
                               context.read<MedicineCubit>().caregiverAcknowledge();
@@ -84,15 +85,15 @@ class SonDashboard extends StatelessWidget {
                               ),
                             ),
                             child: Text(
-                              langCode == 'ar' ? 'تم الاستجابة' : 'Acknowledge',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              langCode == 'ar' ? 'تم الاستجابة من قِبل مقدم الرعاية' : 'Acknowledge',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  
-                  // SMS Log Warning Banner (Simulated)
+
+                  // تنبيه إرسال الـ SMS
                   if (medState.isSmsSent)
                     Container(
                       color: AppColors.warning,
@@ -104,8 +105,8 @@ class SonDashboard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               langCode == 'ar'
-                                  ? '✉️ تم إرسال رسالة SMS طوارئ تلقائية لرقمك المسجل!'
-                                  : '✉️ An emergency SMS has been sent to your registered phone!',
+                                  ? ' تم تفعيل نظام الـ SMS للطوارئ لعدم الاستجابة!'
+                                  : ' Emergency SMS system activated due to no response!',
                               style: const TextStyle(
                                 color: AppColors.darkNavy,
                                 fontWeight: FontWeight.bold,

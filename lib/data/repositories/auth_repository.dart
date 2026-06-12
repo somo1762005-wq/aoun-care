@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/notification_service.dart';
 
 class AuthRepository {
-  // تفعيل خاصية الـ getter الآمن لمنع استدعاء الفايربيز عند بداية التشغيل مباشرة
   fb.FirebaseAuth? get _firebaseAuth {
     if (_isFirebaseEnabled) {
       try {
@@ -31,13 +30,11 @@ class AuthRepository {
     return null;
   }
 
-  // Local persistence keys
   static const String keyRole = 'user_role';
   static const String keyEmail = 'user_email';
   static const String keyPhone = 'son_phone';
   static const String keyIsLoggedIn = 'is_logged_in';
 
-  // Streams for Auth State Changes
   final _authStateController = StreamController<String?>.broadcast();
   Stream<String?> get authStateChanges => _authStateController.stream;
 
@@ -47,7 +44,6 @@ class AuthRepository {
 
   bool get _isFirebaseEnabled {
     try {
-      // التحقق الآمن من أن الفايربيز تم تهيئته بنجاح في الـ main
       return fb.FirebaseAuth.instance.app.name.isNotEmpty;
     } catch (_) {
       return false;
@@ -57,10 +53,11 @@ class AuthRepository {
   void _init() async {
     try {
       if (_isFirebaseEnabled && _firebaseAuth != null) {
-        _firebaseAuth!.authStateChanges().listen((user) {
-          if (user != null && user.emailVerified) {
+        _firebaseAuth!.authStateChanges().listen((user) async {
+          if (user != null) {
+            // جلب البيانات فوراً عند كشف المستخدم
+            await _syncUserData(user);
             _authStateController.add(user.email);
-            // Upload FCM token when authenticated and verified
             NotificationService().uploadFcmToken();
           } else {
             _authStateController.add(null);
@@ -78,7 +75,25 @@ class AuthRepository {
     }
   }
 
-  // دالة منفصلة لإدارة الجلسة المحلية (Mock Mode) بأمان
+  Future<void> _syncUserData(fb.User user) async {
+    try {
+      final doc = await _firestore?.collection('users').doc(user.uid).get();
+      if (doc != null && doc.exists) {
+        final data = doc.data();
+        final prefs = await SharedPreferences.getInstance();
+
+        if (data != null) {
+          if (data['role'] != null) await prefs.setString(keyRole, data['role']);
+          if (data['phone'] != null) await prefs.setString(keyPhone, data['phone']);
+          await prefs.setString(keyEmail, user.email ?? '');
+          await prefs.setBool(keyIsLoggedIn, true);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error syncing user data from Firestore: $e");
+    }
+  }
+
   Future<void> _initMockSession() async {
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool(keyIsLoggedIn) ?? false;
@@ -92,17 +107,8 @@ class AuthRepository {
   Future<void> login(String email, String password) async {
     if (_isFirebaseEnabled && _firebaseAuth != null) {
       final credential = await _firebaseAuth!.signInWithEmailAndPassword(email: email, password: password);
-      final user = credential.user;
-      if (user != null) {
-        await user.reload(); // Refresh verification status
-        final updatedUser = _firebaseAuth!.currentUser;
-        if (updatedUser != null && !updatedUser.emailVerified) {
-          await _firebaseAuth!.signOut();
-          throw fb.FirebaseAuthException(
-            code: 'email-not-verified',
-            message: 'الرجاء التحقق من بريدك الإلكتروني أولاً. تم إرسال رابط التحقق.',
-          );
-        }
+      if (credential.user != null) {
+        await _syncUserData(credential.user!);
       }
     } else {
       final prefs = await SharedPreferences.getInstance();
@@ -117,17 +123,14 @@ class AuthRepository {
       final credential = await _firebaseAuth!.createUserWithEmailAndPassword(email: email, password: password);
       final user = credential.user;
       if (user != null) {
-        await user.sendEmailVerification();
-        // حفظ رقم الهاتف في قاعدة البيانات Firestore
         await _firestore?.collection('users').doc(user.uid).set({
           'email': email,
           'phone': phone,
           'createdAt': fs.FieldValue.serverTimestamp(),
+          'role': 'none',
         });
-        await _firebaseAuth!.signOut(); // تسجيل الخروج حتى يتم التحقق
+        await _syncUserData(user);
       }
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(keyPhone, phone);
     } else {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyIsLoggedIn, true);
@@ -141,6 +144,7 @@ class AuthRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(keyIsLoggedIn);
     await prefs.remove(keyRole);
+    await prefs.remove(keyEmail);
 
     if (_isFirebaseEnabled && _firebaseAuth != null) {
       await _firebaseAuth!.signOut();
@@ -152,11 +156,39 @@ class AuthRepository {
   Future<void> saveRole(String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(keyRole, role);
+
+    if (_isFirebaseEnabled && _firebaseAuth != null) {
+      final user = _firebaseAuth!.currentUser;
+      if (user != null) {
+        await _firestore?.collection('users').doc(user.uid).set({
+          'role': role,
+        }, fs.SetOptions(merge: true));
+      }
+    }
   }
 
   Future<String?> getRole() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(keyRole);
+    final localRole = prefs.getString(keyRole);
+
+    if (_isFirebaseEnabled && _firebaseAuth != null) {
+      final user = _firebaseAuth!.currentUser;
+      if (user != null) {
+        try {
+          final doc = await _firestore?.collection('users').doc(user.uid).get();
+          if (doc != null && doc.exists) {
+            final role = doc.data()?['role'] as String?;
+            if (role != null) {
+              await prefs.setString(keyRole, role);
+              return role;
+            }
+          }
+        } catch (e) {
+          debugPrint("Error fetching role from Firestore: $e");
+        }
+      }
+    }
+    return localRole;
   }
 
   Future<void> saveEmergencyPhone(String phone) async {
@@ -175,17 +207,18 @@ class AuthRepository {
 
   Future<String?> getEmergencyPhone() async {
     final prefs = await SharedPreferences.getInstance();
-    String? phone = prefs.getString(keyPhone);
+    final localPhone = prefs.getString(keyPhone);
 
-    if (phone == null && _isFirebaseEnabled && _firebaseAuth != null) {
+    if (_isFirebaseEnabled && _firebaseAuth != null) {
       final user = _firebaseAuth!.currentUser;
       if (user != null) {
         try {
           final doc = await _firestore?.collection('users').doc(user.uid).get();
           if (doc != null && doc.exists) {
-            phone = doc.data()?['phone'] as String?;
+            final phone = doc.data()?['phone'] as String?;
             if (phone != null) {
               await prefs.setString(keyPhone, phone);
+              return phone;
             }
           }
         } catch (e) {
@@ -193,22 +226,13 @@ class AuthRepository {
         }
       }
     }
-    return phone;
+    return localPhone;
   }
 
   Future<String?> getCurrentUserEmail() async {
     if (_isFirebaseEnabled && _firebaseAuth != null) {
       final user = _firebaseAuth!.currentUser;
-      if (user != null) {
-        try {
-          await user.reload();
-          final updated = _firebaseAuth!.currentUser;
-          if (updated != null && updated.emailVerified) {
-            return updated.email;
-          }
-        } catch (_) {}
-      }
-      return null;
+      return user?.email;
     } else {
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool(keyIsLoggedIn) ?? false;
@@ -216,17 +240,11 @@ class AuthRepository {
     }
   }
 
+  String? get currentUserId {
+    return _firebaseAuth?.currentUser?.uid;
+  }
+
   Future<bool> isEmailVerified() async {
-    if (_isFirebaseEnabled && _firebaseAuth != null) {
-      final user = _firebaseAuth!.currentUser;
-      if (user != null) {
-        try {
-          await user.reload();
-          return _firebaseAuth!.currentUser?.emailVerified ?? false;
-        } catch (_) {}
-      }
-      return false;
-    }
     return true;
   }
 }

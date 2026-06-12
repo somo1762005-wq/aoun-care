@@ -15,8 +15,6 @@ class AuthAuthenticated extends AuthState {
   const AuthAuthenticated(this.email);
 }
 
-// تم حذف حالة AuthVerificationSent نهائياً لمنع تعليق الشاشة
-
 class AuthUnauthenticated extends AuthState {}
 
 class AuthError extends AuthState {
@@ -29,17 +27,22 @@ class AuthCubit extends Cubit<AuthState> {
   final AuthRepository _authRepository;
 
   AuthCubit(this._authRepository) : super(AuthInitial()) {
+    // تشغيل الفحص الأولي والمراقبة دون انتظار متزامن يعطل الـ UI
     _checkInitialAuth();
     _monitorAuthState();
   }
 
-  void _checkInitialAuth() async {
-    final email = await _authRepository.getCurrentUserEmail();
-    if (email != null) {
-      emit(AuthAuthenticated(email));
-    } else {
+  void _checkInitialAuth() {
+    // نستخدم then بدلاً من await بداخل الـ constructor لتجنب تعليق الشاشة
+    _authRepository.getCurrentUserEmail().then((email) {
+      if (email != null) {
+        emit(AuthAuthenticated(email));
+      } else {
+        emit(AuthUnauthenticated());
+      }
+    }).catchError((_) {
       emit(AuthUnauthenticated());
-    }
+    });
   }
 
   void _monitorAuthState() {
@@ -49,6 +52,8 @@ class AuthCubit extends Cubit<AuthState> {
       } else {
         emit(AuthUnauthenticated());
       }
+    }, onError: (error) {
+      emit(AuthUnauthenticated());
     });
   }
 
@@ -60,7 +65,6 @@ class AuthCubit extends Cubit<AuthState> {
     return await _authRepository.getEmergencyPhone();
   }
 
-  // Regex validations
   final RegExp _emailRegExp = RegExp(
     r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
   );
@@ -90,16 +94,14 @@ class AuthCubit extends Cubit<AuthState> {
 
     try {
       await _authRepository.login(email.trim(), password);
-      // بعد نجاح تسجيل الدخول، نبث حالة النجاح مباشرة
+      // التأكد من بث الحالة فوراً بعد النجاح
       emit(AuthAuthenticated(email.trim()));
     } catch (e) {
       String errMsg = langCode == 'ar'
           ? 'فشل تسجيل الدخول: الرجاء التحقق من البيانات'
           : 'Login failed: Please check credentials';
-      if (e is fb.FirebaseAuthException) {
-        if (e.message != null) {
-          errMsg = e.message!;
-        }
+      if (e is fb.FirebaseAuthException && e.message != null) {
+        errMsg = e.message!;
       }
       emit(AuthError(message: errMsg));
     }
@@ -144,7 +146,6 @@ class AuthCubit extends Cubit<AuthState> {
 
     try {
       await _authRepository.register(email.trim(), password, phone.trim());
-      // هنا التعديل السحري: طيران مباشر لصفحة الأدوار فور نجاح التسجيل!
       emit(AuthAuthenticated(email.trim()));
     } catch (e) {
       String errMsg = langCode == 'ar'

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ActivityLog {
   final String id;
+  final String userId;
   final String medicineName;
   final DateTime timestamp;
   final bool takenByFather;
@@ -9,6 +10,7 @@ class ActivityLog {
 
   ActivityLog({
     required this.id,
+    this.userId = '',
     required this.medicineName,
     required this.timestamp,
     required this.takenByFather,
@@ -17,6 +19,7 @@ class ActivityLog {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,
       'medicineName': medicineName,
       'timestamp': Timestamp.fromDate(timestamp),
       'takenByFather': takenByFather,
@@ -36,6 +39,7 @@ class ActivityLog {
 
     return ActivityLog(
       id: documentId,
+      userId: map['userId'] ?? '',
       medicineName: map['medicineName'] ?? '',
       timestamp: ts,
       takenByFather: map['takenByFather'] ?? false,

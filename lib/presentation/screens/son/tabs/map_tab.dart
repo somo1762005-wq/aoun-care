@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/localization.dart';
 import '../../../../core/theme.dart';
 import '../../../../logic/language/language_cubit.dart';
@@ -48,24 +49,25 @@ class _MapTabState extends State<MapTab> {
       _isLocating = true;
     });
 
-    if (_isFirebaseEnabled) {
-      final docRef = fs.FirebaseFirestore.instance.collection('locations').doc('father');
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (_isFirebaseEnabled && user != null) {
+      final docRef = fs.FirebaseFirestore.instance.collection('users').doc(user.uid);
       _locationSubscription = docRef.snapshots().listen((snapshot) {
         if (snapshot.exists && snapshot.data() != null) {
           final data = snapshot.data() as Map<String, dynamic>;
-          final lat = data['latitude'] as double?;
-          final lng = data['longitude'] as double?;
-          
-          if (lat != null && lng != null) {
+          final geoPoint = data['lastLocation'] as fs.GeoPoint?;
+
+          if (geoPoint != null) {
             if (mounted) {
               setState(() {
-                _lat = lat;
-                _lng = lng;
+                _lat = geoPoint.latitude;
+                _lng = geoPoint.longitude;
                 _isLocating = false;
 
                 final now = DateTime.now();
                 final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-                
+
                 _movementLogs.insert(0, '[Firestore GPS $formattedTime] Lat: ${_lat.toStringAsFixed(6)}, Lng: ${_lng.toStringAsFixed(6)}');
                 if (_movementLogs.length > 5) {
                   _movementLogs.removeLast();
@@ -83,13 +85,12 @@ class _MapTabState extends State<MapTab> {
         }
       });
     } else {
-      // Simulate location coordinates streaming every 5 seconds in mock mode
       _mockTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
         if (mounted) {
           final rand = Random();
           final deltaLat = (rand.nextDouble() - 0.5) * 0.0005;
           final deltaLng = (rand.nextDouble() - 0.5) * 0.0005;
-          
+
           setState(() {
             _lat += deltaLat;
             _lng += deltaLng;
@@ -97,7 +98,7 @@ class _MapTabState extends State<MapTab> {
 
             final now = DateTime.now();
             final formattedTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-            
+
             _movementLogs.insert(0, '[Mock GPS $formattedTime] Lat: ${_lat.toStringAsFixed(6)}, Lng: ${_lng.toStringAsFixed(6)}');
             if (_movementLogs.length > 5) {
               _movementLogs.removeLast();
@@ -113,17 +114,18 @@ class _MapTabState extends State<MapTab> {
       _isLocating = true;
     });
 
-    if (_isFirebaseEnabled) {
-      fs.FirebaseFirestore.instance.collection('locations').doc('father').get().then((snapshot) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (_isFirebaseEnabled && user != null) {
+      fs.FirebaseFirestore.instance.collection('users').doc(user.uid).get().then((snapshot) {
         if (snapshot.exists && snapshot.data() != null) {
           final data = snapshot.data() as Map<String, dynamic>;
-          final lat = data['latitude'] as double?;
-          final lng = data['longitude'] as double?;
-          if (lat != null && lng != null) {
+          final geoPoint = data['lastLocation'] as fs.GeoPoint?;
+          if (geoPoint != null) {
             if (mounted) {
               setState(() {
-                _lat = lat;
-                _lng = lng;
+                _lat = geoPoint.latitude;
+                _lng = geoPoint.longitude;
                 _isLocating = false;
               });
             }
@@ -167,7 +169,6 @@ class _MapTabState extends State<MapTab> {
           ),
           const SizedBox(height: 16),
 
-          // Custom Map placeholder widget (Premium styling, circles, pulsing icon)
           Expanded(
             flex: 3,
             child: Container(
@@ -183,24 +184,22 @@ class _MapTabState extends State<MapTab> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Grid background lines for technological map aesthetic
                     Positioned.fill(
                       child: GridPaper(
-                        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04),
+                        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
                         interval: 50.0,
                         divisions: 2,
                         subdivisions: 1,
                       ),
                     ),
 
-                    // Radar circular pulse
                     Container(
                       height: 150,
                       width: 150,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.primary.withValues(alpha: 0.05),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                        color: AppColors.primary.withOpacity(0.05),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
                       ),
                     ),
                     Container(
@@ -208,12 +207,11 @@ class _MapTabState extends State<MapTab> {
                       width: 80,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                        color: AppColors.primary.withOpacity(0.08),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
                       ),
                     ),
 
-                    // Pulse target point representing the father
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -226,7 +224,7 @@ class _MapTabState extends State<MapTab> {
                             border: Border.all(color: Colors.white, width: 3),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.5),
+                                color: AppColors.primary.withOpacity(0.5),
                                 blurRadius: 15,
                                 spreadRadius: 4,
                               )
@@ -253,7 +251,6 @@ class _MapTabState extends State<MapTab> {
                       ],
                     ),
 
-                    // Loading Indicator
                     if (_isLocating)
                       Positioned(
                         top: 16,
@@ -261,7 +258,7 @@ class _MapTabState extends State<MapTab> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.darkNavy.withValues(alpha: 0.8),
+                            color: AppColors.darkNavy.withOpacity(0.8),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const SizedBox(
@@ -278,7 +275,6 @@ class _MapTabState extends State<MapTab> {
           ),
           const SizedBox(height: 16),
 
-          // Coordinates panel
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -359,29 +355,28 @@ class _MapTabState extends State<MapTab> {
             ),
           ),
           const SizedBox(height: 16),
-          
-          // Live coordinates stream log console
+
           Expanded(
             flex: 1,
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: ListView(
                 children: _movementLogs.isEmpty
                     ? [
-                        Text(
-                          langCode == 'ar' ? 'بانتظار إشارات GPS البث...' : 'Waiting for GPS streaming signals...',
-                          style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.blueGrey),
-                          textAlign: TextAlign.center,
-                        )
-                      ]
+                  Text(
+                    langCode == 'ar' ? 'بانتظار إشارات GPS البث...' : 'Waiting for GPS streaming signals...',
+                    style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.blueGrey),
+                    textAlign: TextAlign.center,
+                  )
+                ]
                     : _movementLogs.map((log) => Text(
-                        log,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.blueGrey),
-                      )).toList(),
+                  log,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.blueGrey),
+                )).toList(),
               ),
             ),
           ),

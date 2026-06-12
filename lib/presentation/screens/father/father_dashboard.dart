@@ -2,14 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as fs; // Wait, we should use package:cloud_firestore/cloud_firestore.dart
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/localization.dart';
 import '../../../core/theme.dart';
-import '../../../data/models/medicine.dart';
 import '../../../logic/medicine/medicine_cubit.dart';
 import '../../../logic/language/language_cubit.dart';
+import '../../../logic/auth/auth_cubit.dart';
 import '../../widgets/theme_language_header.dart';
+import '../auth_screen.dart';
 import '../role_selection_screen.dart';
 
 class FatherDashboard extends StatefulWidget {
@@ -37,35 +38,23 @@ class _FatherDashboardState extends State<FatherDashboard> {
   Future<void> _startLocationService() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        debugPrint("Location services are disabled.");
-        return;
-      }
+      if (!serviceEnabled) return;
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          debugPrint("Location permission denied.");
-          return;
-        }
-      }
-      
-      if (permission == LocationPermission.deniedForever) {
-        debugPrint("Location permission permanently denied.");
-        return;
+        if (permission == LocationPermission.denied) return;
       }
 
-      // Start listening to the stream
+      if (permission == LocationPermission.deniedForever) return;
+
       _positionSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 5, // Update every 5 meters
+          distanceFilter: 10,
         ),
       ).listen((Position position) {
         _uploadLocation(position);
-      }, onError: (err) {
-        debugPrint("Geolocator stream error: $err");
       });
     } catch (e) {
       debugPrint("Error starting location tracking: $e");
@@ -74,51 +63,28 @@ class _FatherDashboardState extends State<FatherDashboard> {
 
   Future<void> _uploadLocation(Position position) async {
     try {
-      final firestore = fs.FirebaseFirestore.instance;
-      if (firestore.app.name.isNotEmpty) {
-        await firestore.collection('locations').doc('father').set({
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'timestamp': fs.FieldValue.serverTimestamp(),
-        });
-        debugPrint("Uploaded father position: ${position.latitude}, ${position.longitude}");
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await fs.FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'lastLocation': fs.GeoPoint(position.latitude, position.longitude),
+          'lastLocationUpdate': fs.FieldValue.serverTimestamp(),
+        }, fs.SetOptions(merge: true));
       }
     } catch (e) {
       debugPrint("Failed to upload position: $e");
     }
   }
 
-  Stream<List<Medicine>> _getMedicinesStream() {
-    try {
-      final firestore = fs.FirebaseFirestore.instance;
-      if (firestore.app.name.isNotEmpty) {
-        return firestore.collection('medicines').snapshots().map((snapshot) {
-          return snapshot.docs.map((doc) {
-            return Medicine.fromMap(doc.data(), doc.id);
-          }).toList();
-        });
-      }
-    } catch (_) {}
-    return const Stream.empty();
-  }
-
   String _formatDuration(Duration duration, String langCode) {
-    final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
 
-    // If exactly 5 minutes, display the specific Arabic string requested: "متبقي على الجرعة القادمة خمس دقائق"
-    if (langCode == 'ar' && duration.inMinutes == 5 && seconds == 0) {
-      return 'خمس دقائق';
+    if (langCode == 'ar') {
+      // إصلاح الترتيب العربي الصحيح والمريح للقراءة
+      return '$minutes دقائق و $seconds ثواني';
     }
 
-    String formatted = '';
-    if (hours > 0) {
-      formatted += '$hours ${langCode == 'ar' ? 'ساعة' : 'hr'} ';
-    }
-    formatted += '$minutes ${AppLocalization.translate('minutes', langCode)} ';
-    formatted += '$seconds ${AppLocalization.translate('seconds', langCode)}';
-    return formatted;
+    return '$minutes min $seconds sec';
   }
 
   @override
@@ -126,371 +92,199 @@ class _FatherDashboardState extends State<FatherDashboard> {
     final langCode = context.watch<LanguageCubit>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return StreamBuilder<List<Medicine>>(
-      stream: _getMedicinesStream(),
-      builder: (context, firestoreSnapshot) {
-        if (firestoreSnapshot.hasData && firestoreSnapshot.data != null) {
-          final meds = firestoreSnapshot.data!;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              context.read<MedicineCubit>().setMedicines(meds);
-            }
-          });
-        }
+    return BlocBuilder<MedicineCubit, MedicineState>(
+      builder: (context, state) {
+        final hasNextDose = state.nextDoseMedicine != null && state.nextDoseCountdown != null;
 
-        return BlocBuilder<MedicineCubit, MedicineState>(
-          builder: (context, state) {
-            final hasNextDose = state.nextDoseMedicine != null && state.nextDoseCountdown != null;
-
-            return Scaffold(
-              appBar: ThemeLanguageHeader(
-                titleKey: 'father_title',
-                extraActions: [
-                  IconButton(
-                    icon: const Icon(Icons.swap_horiz_rounded),
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => const RoleSelectionScreen(),
-                        ),
-                      );
-                    },
-                    tooltip: langCode == 'ar' ? 'تغيير الواجهة' : 'Change Mode',
-                  ),
-                ],
+        return Scaffold(
+          appBar: ThemeLanguageHeader(
+            // 1. تغيير عنوان الـ AppBar ليصبح "واجهة الأب" بالعربية
+            titleKey: langCode == 'ar' ? 'واجهة الأب' : 'father_dashboard',
+            extraActions: [
+              IconButton(
+                icon: const Icon(Icons.swap_horiz_rounded),
+                onPressed: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+                  );
+                },
               ),
-              body: Stack(
-                children: [
-                  // Main Dashboard View
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Header Card
-                          Container(
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.cardDark : Colors.white,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 4),
-                                )
-                              ],
+              IconButton(
+                icon: const Icon(Icons.logout_rounded),
+                onPressed: () async {
+                  await context.read<AuthCubit>().logout();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const AuthScreen()),
+                          (route) => false,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+          body: Stack(
+            children: [
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    children: [
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.cardDark : Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                        ),
+                        child: Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 30,
+                              backgroundColor: AppColors.primary,
+                              child: Icon(Icons.person_rounded, color: Colors.white, size: 36),
                             ),
-                            padding: const EdgeInsets.all(24),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 30,
-                                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                                  child: const Icon(Icons.person_rounded, color: AppColors.primary, size: 36),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        langCode == 'ar' ? 'مرحبًا بالوالد العزيز' : 'Welcome Dear Father',
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : AppColors.darkNavy,
-                                        ),
-                                      ),
-                                      Text(
-                                        langCode == 'ar' ? 'أتمنى لك يومًا صحيًا ملؤه العافية' : 'Wishing you a healthy day',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                        ),
-                                      ),
-                                    ],
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    langCode == 'ar' ? 'مرحبًا بالوالد العزيز' : 'Welcome Dear Father',
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Central Countdown Widget (Ultra-Accessible, HUGE font)
-                          Expanded(
-                            child: Center(
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(vertical: 32),
-                                padding: const EdgeInsets.all(32),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.08),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary.withValues(alpha: 0.3),
-                                    width: 4,
+                                  Text(
+                                    langCode == 'ar' ? 'أتمنى لك يومًا صحيًا' : 'Wishing you a healthy day',
+                                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                                   ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.access_time_filled_rounded,
-                                      color: AppColors.primary,
-                                      size: hasNextDose ? 54 : 64,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    if (hasNextDose) ...[
-                                      Text(
-                                        AppLocalization.translate('next_dose_in', langCode),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      // Medicine Name
-                                      Text(
-                                        state.nextDoseMedicine!.name,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : AppColors.darkNavy,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Ticking Countdown
-                                      Text(
-                                        _formatDuration(state.nextDoseCountdown!, langCode),
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w900,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      Text(
-                                        AppLocalization.translate('no_upcoming_doses', langCode),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : AppColors.darkNavy,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
-                          ),
+                          ],
+                        ),
+                      ),
 
-                          // Testing Simulation Tools (At Bottom)
-                          Container(
-                            padding: const EdgeInsets.all(16),
+                      const SizedBox(height: 32),
+
+                      // Countdown
+                      Expanded(
+                        child: Center(
+                          child: Container(
+                            width: 280,
+                            height: 280,
                             decoration: BoxDecoration(
-                              color: isDark ? AppColors.cardDark : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isDark ? Colors.white10 : Colors.black12,
-                              ),
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 4),
                             ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(
-                                  langCode == 'ar' ? '🛠️ أدوات المحاكاة والاختبار السريع:' : '🛠️ Simulation & Quick Testing Tools:',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          context.read<MedicineCubit>().demoTriggerAlarm('بنادول - Panadol');
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                        ),
-                                        child: Text(
-                                          langCode == 'ar' ? 'رنين إنذار بنادول' : 'Ring Panadol Alarm',
-                                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          context.read<MedicineCubit>().demoTriggerAlarm('أسبيرين - Aspirin');
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                        ),
-                                        child: Text(
-                                          langCode == 'ar' ? 'رنين إنذار أسبيرين' : 'Ring Aspirin Alarm',
-                                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                const Icon(Icons.access_time_filled_rounded, color: AppColors.primary, size: 64),
+                                const SizedBox(height: 16),
+                                if (hasNextDose) ...[
+                                  Text(
+                                    AppLocalization.translate('next_dose_in', langCode),
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    state.nextDoseMedicine!.name,
+                                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _formatDuration(state.nextDoseCountdown!, langCode),
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primary),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ] else ...[
+                                  Text(
+                                    AppLocalization.translate('no_upcoming_doses', langCode),
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Full Screen Interruptive Alarm Overlay
-                  if (state.isAlarmActive && state.activeAlarmMedicine != null)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.92),
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
-                        child: SafeArea(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              // Top Icon Pulse
-                              Column(
-                                children: [
-                                  const SizedBox(height: 24),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: AppColors.error.withValues(alpha: 0.2),
-                                    ),
-                                    padding: const EdgeInsets.all(24),
-                                    child: const Icon(
-                                      Icons.ring_volume_rounded,
-                                      color: AppColors.error,
-                                      size: 72,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  // Title
-                                  Text(
-                                    AppLocalization.translate('alarm_title', langCode),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  // Medicine Detail text
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white12,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                    child: Text(
-                                      state.activeAlarmMedicine!.name,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              // Escalation warning indicator
-                              Column(
-                                children: [
-                                  Text(
-                                    AppLocalization.translate('escalation_warning', langCode),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.orangeAccent.shade200,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (state.isSonAlertActive) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      langCode == 'ar'
-                                          ? '⚠️ تم تنبيه الابن بالفعل في التطبيق'
-                                          : '⚠️ Caregiver has been alerted in app',
-                                      style: const TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                  if (state.isSmsSent) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      langCode == 'ar'
-                                          ? '✉️ تم إرسال رسالة SMS الطوارئ للابن!'
-                                          : '✉️ Emergency SMS has been sent to Caregiver!',
-                                      style: const TextStyle(color: Colors.amberAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 32),
-                                  // Big Green Confirm Button
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 90,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        context.read<MedicineCubit>().confirmDoseTaken();
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              AppLocalization.translate('taken_success', langCode),
-                                            ),
-                                            backgroundColor: AppColors.success,
-                                          ),
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.success,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(24),
-                                        ),
-                                        elevation: 8,
-                                      ),
-                                      child: Text(
-                                        AppLocalization.translate('mark_as_taken', langCode),
-                                        style: const TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                ],
-                              ),
-                            ],
-                          ),
                         ),
                       ),
-                    ),
-                ],
+                    ],
+                  ),
+                ),
               ),
-            );
-          },
+
+              // Alarm Overlay
+              if (state.isAlarmActive)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.95),
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.notifications_active, color: AppColors.error, size: 120),
+                        const SizedBox(height: 32),
+                        Text(
+                          langCode == 'ar'
+                              ? "الوالد العزيز حان موعد جرعتك\nاضغط هنا للتأكيد"
+                              : AppLocalization.translate('time_to_take_medicine', langCode),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: Text(
+                            state.activeAlarmMedicine?.name ?? "",
+                            style: const TextStyle(
+                                color: AppColors.warning,
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 64),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => context.read<MedicineCubit>().confirmDoseTaken(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              elevation: 8,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
+                            ),
+                            child: Text(
+                              langCode == 'ar' ? "تم أخذ الجرعة" : "Dose Taken",
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

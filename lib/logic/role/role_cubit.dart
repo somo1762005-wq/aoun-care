@@ -10,18 +10,25 @@ class RoleCubit extends Cubit<UserRole> {
     _loadRole();
   }
 
-  void _loadRole() async {
-    final roleStr = await _authRepository.getRole();
-    if (roleStr == 'son') {
-      emit(UserRole.son);
-    } else if (roleStr == 'father') {
-      emit(UserRole.father);
-    } else {
+  void _loadRole() {
+    // جلب الدور دون تعطيل الـ UI
+    _authRepository.getRole().then((roleStr) {
+      if (roleStr == 'son') {
+        emit(UserRole.son);
+      } else if (roleStr == 'father') {
+        emit(UserRole.father);
+      } else {
+        emit(UserRole.none);
+      }
+    }).catchError((_) {
       emit(UserRole.none);
-    }
+    });
   }
 
   Future<void> selectRole(UserRole role) async {
+    // 1. بث الحالة فوراً وبشكل لحظي (Instant Emit)
+    emit(role);
+
     String roleStr = 'none';
     if (role == UserRole.son) {
       roleStr = 'son';
@@ -29,12 +36,16 @@ class RoleCubit extends Cubit<UserRole> {
       roleStr = 'father';
     }
 
-    await _authRepository.saveRole(roleStr);
-    emit(role);
+    // 2. الحفظ في الخلفية تماماً وبدون استخدام كلمة await نهائياً
+    // لضمان عدم تعليق الشاشة وتجنب الـ Deadlocks
+    _authRepository.saveRole(roleStr).catchError((e) {
+      // تسجيل الخطأ فقط في حالة الفشل دون التأثير على المستخدم
+      print("Background save error: $e");
+    });
   }
 
-  void clearRole() async {
-    await _authRepository.saveRole('none');
+  void clearRole() {
     emit(UserRole.none);
+    _authRepository.saveRole('none');
   }
 }

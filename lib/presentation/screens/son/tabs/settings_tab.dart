@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/localization.dart';
 import '../../../../core/theme.dart';
 import '../../../../logic/auth/auth_cubit.dart';
@@ -43,65 +44,28 @@ class _SettingsTabState extends State<SettingsTab> {
     super.dispose();
   }
 
-  void _shareApp(BuildContext context, String text) {
-    // Simulate share intent
-    showDialog(
-      context: context,
-      builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? AppColors.cardDark : Colors.white,
-          title: Text(
-            context.read<LanguageCubit>().state == 'ar' ? 'مشاركة التطبيق' : 'Share App',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                context.read<LanguageCubit>().state == 'ar' 
-                    ? 'رابط المشاركة جاهز للإرسال:' 
-                    : 'Share link payload is ready:',
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  text,
-                  style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      context.read<LanguageCubit>().state == 'ar' 
-                          ? 'تم النسخ للحافظة!' 
-                          : 'Copied to clipboard!',
-                    ),
-                  ),
-                );
-              },
-              child: Text(context.read<LanguageCubit>().state == 'ar' ? 'نسخ الرابط' : 'Copy Link'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(context.read<LanguageCubit>().state == 'ar' ? 'إغلاق' : 'Close'),
-            )
-          ],
+  // إصلاح دالة المشاركة مع إضافة Debugging
+  Future<void> _shareApp(BuildContext context) async {
+    const String shareLink = "https://aoun-care.app/download";
+    const String shareMessage =
+        "أنصحك باستخدام تطبيق عوْن (Aoun Care) للعناية والمتابعة الصحية الذكية لكبار السن والوالدين. يمكنك تحميل التطبيق من الرابط التالي: $shareLink";
+
+    try {
+      debugPrint("Attempting to share message: $shareMessage");
+
+      // استخدام Share.share مع التحقق من السياق (Context)
+      final result = await Share.share(shareMessage);
+
+      debugPrint("Share result: ${result.status}");
+    } catch (e) {
+      debugPrint("Error while sharing: $e");
+      // في حال فشل الـ Native Share، نظهر SnackBar للتنبيه
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("فشل فتح نافذة المشاركة: $e")),
         );
-      },
-    );
+      }
+    }
   }
 
   @override
@@ -162,7 +126,6 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
                   childrenPadding: const EdgeInsets.only(top: 16, bottom: 8),
                   children: [
-                    // Father Buffer Slider
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -197,7 +160,6 @@ class _SettingsTabState extends State<SettingsTab> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Son Buffer Slider
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -237,7 +199,7 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
             const SizedBox(height: 12),
 
-            // Emergency Contact Phone Number Card
+            // Emergency Phone Card
             Card(
               elevation: 0,
               color: isDark ? AppColors.cardDark : Colors.white,
@@ -303,15 +265,12 @@ class _SettingsTabState extends State<SettingsTab> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                onTap: () {
-                  final text = '${AppLocalization.translate('share_text', langCode)} https://aoun-care.app/download';
-                  _shareApp(context, text);
-                },
+                onTap: () => _shareApp(context),
               ),
             ),
             const SizedBox(height: 12),
 
-            // Language quick toggle tile
+            // Language quick toggle
             Card(
               elevation: 0,
               color: isDark ? AppColors.cardDark : Colors.white,
@@ -336,7 +295,7 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
             const SizedBox(height: 24),
 
-            // Logout card tile
+            // Logout
             Card(
               elevation: 0,
               color: isDark ? AppColors.cardDark : Colors.white,
@@ -355,7 +314,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   if (context.mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-                      (route) => false,
+                          (route) => false,
                     );
                   }
                 },
