@@ -58,11 +58,7 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
+
 
   // إصلاح دالة المشاركة مع إضافة Debugging
   Future<void> _shareApp(BuildContext context) async {

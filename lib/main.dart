@@ -14,7 +14,7 @@ import 'logic/role/role_cubit.dart';
 import 'logic/medicine/medicine_cubit.dart';
 import 'logic/navigation/navigation_cubit.dart';
 import 'presentation/screens/welcome_screen.dart';
-import 'presentation/screens/auth/login_screen.dart';
+import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/role_selection_screen.dart';
 import 'presentation/screens/father/father_dashboard.dart';
 import 'presentation/screens/son/son_dashboard.dart';

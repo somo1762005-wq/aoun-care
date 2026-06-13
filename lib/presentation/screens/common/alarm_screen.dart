@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../logic/medicine/medicine_cubit.dart';
-import '../../../core/constants/app_colors.dart';
+
 
 class AlarmScreen extends StatelessWidget {
   const AlarmScreen({super.key});
@@ -20,7 +20,7 @@ class AlarmScreen extends StatelessWidget {
         }
 
         return Scaffold(
-          backgroundColor: AppColors.primary,
+          backgroundColor: Colors.blue,
           body: SafeArea(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -52,7 +52,7 @@ class AlarmScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'الجرعة: ${medicine.dosageAmount}',
+                  'الجرعة: ${medicine.dosagesPerDay.first}',
                   style: const TextStyle(
                     fontSize: 24,
                     color: Colors.white70,
@@ -67,7 +67,7 @@ class AlarmScreen extends StatelessWidget {
                         onPressed: () => context.read<MedicineCubit>().confirmDoseTaken(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primary,
+                          foregroundColor: Colors.blue,
                           minimumSize: const Size(double.infinity, 80),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
