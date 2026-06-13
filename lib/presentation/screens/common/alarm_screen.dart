@@ -79,20 +79,20 @@ class AlarmScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: () {
-                          // هنا يمكن إضافة منطق التأجيل Snooze
-                          Navigator.of(context).pop();
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 60),
-                        ),
-                        child: const Text(
-                          'تأجيل المنبه (Snooze)',
-                          style: TextStyle(fontSize: 20, decoration: TextDecoration.underline),
-                        ),
-                      ),
+	                      TextButton(
+	                        onPressed: () {
+	                          context.read<MedicineCubit>().snoozeAlarm();
+	                          Navigator.of(context).pop();
+	                        },
+	                        style: TextButton.styleFrom(
+	                          foregroundColor: Colors.white,
+	                          minimumSize: const Size(double.infinity, 60),
+	                        ),
+	                        child: const Text(
+	                          'تأجيل المنبه (Snooze)',
+	                          style: TextStyle(fontSize: 20, decoration: TextDecoration.underline),
+	                        ),
+	                      ),
                       const SizedBox(height: 40),
                     ],
                   ),
