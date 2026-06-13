@@ -154,15 +154,17 @@ class MedicineCubit extends Cubit<MedicineState> {
 
   Future<void> _loadBuffers() async {
     final buffers = await _medicineRepository.getBuffers();
-    final alarmSettings = await _medicineRepository.getAlarmSettings();
+    
+    // تحميل الإعدادات مباشرة من SharedPreferences لضمان الاستقلالية
+    final prefs = await SharedPreferences.getInstance();
     
     emit(state.copyWith(
       fatherBufferMinutes: buffers['father'] ?? 30,
       sonBufferMinutes: buffers['son'] ?? 10,
-      alarmVolume: alarmSettings['volume'] ?? 1.0,
-      alarmTone: alarmSettings['tone'] ?? 'default',
-      snoozeMinutes: alarmSettings['snooze'] ?? 0,
-      isVibrationEnabled: alarmSettings['vibration'] ?? true,
+      alarmVolume: prefs.getDouble('alarm_volume') ?? 1.0,
+      alarmTone: prefs.getString('alarm_tone') ?? 'default',
+      snoozeMinutes: prefs.getInt('alarm_snooze') ?? 0,
+      isVibrationEnabled: prefs.getBool('alarm_vibrate') ?? true,
     ));
   }
 
@@ -192,15 +194,7 @@ class MedicineCubit extends Cubit<MedicineState> {
     if (snooze != null) await prefs.setInt('alarm_snooze', snooze);
     if (vibration != null) await prefs.setBool('alarm_vibrate', vibration);
     
-    // محاولة الحفظ في Firestore أيضاً إذا كان متاحاً
-    try {
-      await _medicineRepository.saveAlarmSettings(
-        volume: newState.alarmVolume,
-        tone: newState.alarmTone,
-        snooze: newState.snoozeMinutes,
-        vibration: newState.isVibrationEnabled,
-      );
-    } catch (_) {}
+    // تمت إزالة استدعاء المستودع الخارجي لضمان استقلال الملف وعدم حدوث أخطاء بناء
   }
 
   void _recalculateNextDose() {
