@@ -300,6 +300,8 @@ class MedicineCubit extends Cubit<MedicineState> {
       ongoing: true,
       fullScreenIntent: true,
       category: AndroidNotificationCategory.alarm,
+      visibility: NotificationVisibility.public,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
     );
 
     await flutterLocalNotificationsPlugin.show(
