@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'core/theme.dart';
 import 'core/notification_service.dart';
 import 'data/repositories/auth_repository.dart';
@@ -12,6 +14,7 @@ import 'logic/role/role_cubit.dart';
 import 'logic/medicine/medicine_cubit.dart';
 import 'logic/navigation/navigation_cubit.dart';
 import 'presentation/screens/welcome_screen.dart';
+import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/role_selection_screen.dart';
 import 'presentation/screens/father/father_dashboard.dart';
 import 'presentation/screens/son/son_dashboard.dart';
@@ -26,6 +29,11 @@ void main() async {
     firebaseInitialized = true;
     debugPrint("Firebase initialized successfully!");
     await NotificationService().initialize();
+    
+    // طلب صلاحية التنبيهات عند فتح التطبيق لضمان عمل المنبه
+    if (!kIsWeb) {
+      await Permission.notification.request();
+    }
   } catch (e) {
     debugPrint("Firebase fallback activated: $e");
   }

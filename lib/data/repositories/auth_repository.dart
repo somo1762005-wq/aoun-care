@@ -55,7 +55,7 @@ class AuthRepository {
       if (_isFirebaseEnabled && _firebaseAuth != null) {
         _firebaseAuth!.authStateChanges().listen((user) async {
           if (user != null) {
-            // جلب البيانات فوراً عند كشف المستخدم
+            // جلب البيانات فوراً عند كشف المستخدم وضمان تحديث الـ SharedPreferences
             await _syncUserData(user);
             _authStateController.add(user.email);
             NotificationService().uploadFcmToken();
@@ -109,6 +109,8 @@ class AuthRepository {
       final credential = await _firebaseAuth!.signInWithEmailAndPassword(email: email, password: password);
       if (credential.user != null) {
         await _syncUserData(credential.user!);
+        // ننتظر قليلاً لضمان حفظ البيانات في SharedPreferences قبل العودة
+        await Future.delayed(const Duration(milliseconds: 500));
       }
     } else {
       final prefs = await SharedPreferences.getInstance();

@@ -8,6 +8,15 @@ class RoleCubit extends Cubit<UserRole> {
 
   RoleCubit(this._authRepository) : super(UserRole.none) {
     _loadRole();
+    // مراقبة حالة المصادقة لإعادة تحميل الدور عند تسجيل الدخول/الخروج
+    _authRepository.authStateChanges.listen((email) {
+      if (email != null) {
+        // ننتظر قليلاً للتأكد من مزامنة البيانات في AuthRepository
+        Future.delayed(const Duration(seconds: 1), () => _loadRole());
+      } else {
+        emit(UserRole.none);
+      }
+    });
   }
 
   void _loadRole() {

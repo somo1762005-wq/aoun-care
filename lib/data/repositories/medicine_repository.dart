@@ -25,6 +25,10 @@ class MedicineRepository {
   static const String keyLogsJson = 'cached_logs';
   static const String keyFatherBuffer = 'father_buffer_minutes';
   static const String keySonBuffer = 'son_buffer_minutes';
+  static const String keyAlarmVolume = 'alarm_volume';
+  static const String keyAlarmTone = 'alarm_tone';
+  static const String keyAlarmSnooze = 'alarm_snooze';
+  static const String keyAlarmVibration = 'alarm_vibration';
 
   final _medicinesController = StreamController<List<Medicine>>.broadcast();
   final _logsController = StreamController<List<ActivityLog>>.broadcast();
@@ -41,12 +45,19 @@ class MedicineRepository {
   MedicineRepository(AuthRepository authRepository) {
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
+        debugPrint("MedicineRepository: User logged in, starting sync for ${user.uid}");
         _startFirestoreSync(user.uid);
       } else {
+        debugPrint("MedicineRepository: User logged out, stopping sync");
         _stopFirestoreSync();
         _loadLocalDataFallback();
       }
     });
+    // فحص أولي في حالة كان المستخدم مسجلاً للدخول بالفعل عند إنشاء الـ Repository
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      _startFirestoreSync(currentUser.uid);
+    }
   }
 
   bool get _isFirebaseEnabled {
@@ -224,6 +235,62 @@ class MedicineRepository {
     return {
       'father': prefs.getInt(keyFatherBuffer) ?? 30,
       'son': prefs.getInt(keySonBuffer) ?? 10,
+    };
+  }
+
+  Future<void> saveAlarmSettings({
+    required double volume,
+    required String tone,
+    required int snooze,
+    required bool vibration,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(keyAlarmVolume, volume);
+    await prefs.setString(keyAlarmTone, tone);
+    await prefs.setInt(keyAlarmSnooze, snooze);
+    await prefs.setBool(keyAlarmVibration, vibration);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (_isFirebaseEnabled && _firestore != null && user != null) {
+      await _firestore!.collection('users').doc(user.uid).set({
+        'alarm_settings': {
+          'volume': volume,
+          'tone': tone,
+          'snooze': snooze,
+          'vibration': vibration,
+        }
+      }, fs.SetOptions(merge: true));
+    }
+  }
+
+  Future<Map<String, dynamic>> getAlarmSettings() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (_isFirebaseEnabled && _firestore != null && user != null) {
+      try {
+        final doc = await _firestore!.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null && data.containsKey('alarm_settings')) {
+            final settings = data['alarm_settings'] as Map<String, dynamic>;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setDouble(keyAlarmVolume, (settings['volume'] as num).toDouble());
+            await prefs.setString(keyAlarmTone, settings['tone'] as String);
+            await prefs.setInt(keyAlarmSnooze, settings['snooze'] as int);
+            await prefs.setBool(keyAlarmVibration, settings['vibration'] as bool);
+            return settings;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching alarm settings from Firestore: $e");
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'volume': prefs.getDouble(keyAlarmVolume) ?? 1.0,
+      'tone': prefs.getString(keyAlarmTone) ?? 'default',
+      'snooze': prefs.getInt(keyAlarmSnooze) ?? 0,
+      'vibration': prefs.getBool(keyAlarmVibration) ?? true,
     };
   }
 }
