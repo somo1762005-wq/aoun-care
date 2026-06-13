@@ -26,6 +26,11 @@ void main() async {
     firebaseInitialized = true;
     debugPrint("Firebase initialized successfully!");
     await NotificationService().initialize();
+    
+    // طلب صلاحية التنبيهات عند فتح التطبيق لضمان عمل المنبه
+    if (!kIsWeb) {
+      await Permission.notification.request();
+    }
   } catch (e) {
     debugPrint("Firebase fallback activated: $e");
   }

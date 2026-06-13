@@ -93,7 +93,6 @@ class NotificationService {
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
-    final android = message.notification?.android;
 
     if (notification != null) {
       await _localNotifications.show(
@@ -118,6 +117,46 @@ class NotificationService {
         payload: message.data.toString(),
       );
     }
+  }
+
+  // إطلاق منبه الطوارئ المخصص
+  Future<void> showAlarmNotification({
+    required String title,
+    required String body,
+    required String tone,
+    required bool vibration,
+  }) async {
+    // تحديد النغمة (يجب إضافة الملفات في android/app/src/main/res/raw)
+    String? soundResource = tone == 'default' ? null : tone;
+
+    AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'alarm_channel_high_priority',
+      'المنبهات الصوتية لعون',
+      channelDescription: 'قناة إنذار صوتي مخصصة وقابلة للتعديل',
+      importance: Importance.max,
+      priority: Priority.high,
+      sound: soundResource != null ? RawResourceAndroidNotificationSound(soundResource) : null,
+      playSound: true,
+      enableVibration: vibration,
+      vibrationPattern: vibration ? Int64List.fromList([0, 1000, 500, 1000]) : null,
+      ongoing: true,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+    );
+
+    await _localNotifications.show(
+      999, // ID ثابت لمنبه الطوارئ
+      title,
+      body,
+      NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.critical,
+        ),
+      ),
+    );
   }
 
   Future<void> uploadFcmToken() async {

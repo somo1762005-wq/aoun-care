@@ -292,7 +292,17 @@ class _MedicationTabState extends State<MedicationTab> {
                         child: ListTile(
                           onTap: () => _showAddEditSheet(context, medicine),
                           title: Text(medicine.name, style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : null)),
-                          subtitle: Text(langCode == 'ar' ? 'المتبقي: ${medicine.remainingQuantity} حبة' : 'Stock: ${medicine.remainingQuantity}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(langCode == 'ar' ? 'المتبقي: ${medicine.remainingQuantity} حبة' : 'Stock: ${medicine.remainingQuantity}'),
+                              if (isLowStock)
+                                Text(
+                                  langCode == 'ar' ? 'تنبيه: الدواء أوشك على الانتهاء!' : 'Alert: Medicine is running low!',
+                                  style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
                           trailing: isLowStock ? const Icon(Icons.warning_amber_rounded, color: Colors.red) : const Icon(Icons.edit),
                         ),
                       );

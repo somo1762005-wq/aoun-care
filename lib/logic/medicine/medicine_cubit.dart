@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:background_sms/background_sms.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../core/notification_service.dart';
 import '../../data/models/medicine.dart';
 import '../../data/models/activity.dart';
 import '../../data/repositories/medicine_repository.dart';
@@ -29,6 +30,12 @@ class MedicineState {
   final int fatherBufferMinutes;
   final int sonBufferMinutes;
 
+  // إعدادات المنبه
+  final double alarmVolume;
+  final String alarmTone;
+  final int snoozeMinutes;
+  final bool isVibrationEnabled;
+
   final String? error;
 
   MedicineState({
@@ -46,6 +53,10 @@ class MedicineState {
     this.smsLogs = const [],
     this.fatherBufferMinutes = 30,
     this.sonBufferMinutes = 10,
+    this.alarmVolume = 1.0,
+    this.alarmTone = 'default',
+    this.snoozeMinutes = 0,
+    this.isVibrationEnabled = true,
     this.error,
   });
 
@@ -64,6 +75,10 @@ class MedicineState {
     List<String>? smsLogs,
     int? fatherBufferMinutes,
     int? sonBufferMinutes,
+    double? alarmVolume,
+    String? alarmTone,
+    int? snoozeMinutes,
+    bool? isVibrationEnabled,
     String? error,
   }) {
     return MedicineState(
@@ -81,6 +96,10 @@ class MedicineState {
       smsLogs: smsLogs ?? this.smsLogs,
       fatherBufferMinutes: fatherBufferMinutes ?? this.fatherBufferMinutes,
       sonBufferMinutes: sonBufferMinutes ?? this.sonBufferMinutes,
+      alarmVolume: alarmVolume ?? this.alarmVolume,
+      alarmTone: alarmTone ?? this.alarmTone,
+      snoozeMinutes: snoozeMinutes ?? this.snoozeMinutes,
+      isVibrationEnabled: isVibrationEnabled ?? this.isVibrationEnabled,
       error: error ?? this.error,
     );
   }
@@ -117,9 +136,11 @@ class MedicineCubit extends Cubit<MedicineState> {
       emit(state.copyWith(logs: activityLogs));
     });
 
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (user != null) {
-        _loadBuffers();
+        // ننتظر قليلاً للتأكد من أن AuthRepository قد قام بمزامنة البيانات الأساسية
+        await Future.delayed(const Duration(seconds: 1));
+        await _loadBuffers();
         // إعادة تهيئة الاستماع عند تغيير المستخدم لضمان جلب البيانات الجديدة
         _medicineRepository.refreshStreams();
       }
@@ -132,15 +153,42 @@ class MedicineCubit extends Cubit<MedicineState> {
 
   Future<void> _loadBuffers() async {
     final buffers = await _medicineRepository.getBuffers();
+    final alarmSettings = await _medicineRepository.getAlarmSettings();
+    
     emit(state.copyWith(
       fatherBufferMinutes: buffers['father'] ?? 30,
       sonBufferMinutes: buffers['son'] ?? 10,
+      alarmVolume: alarmSettings['volume'] ?? 1.0,
+      alarmTone: alarmSettings['tone'] ?? 'default',
+      snoozeMinutes: alarmSettings['snooze'] ?? 0,
+      isVibrationEnabled: alarmSettings['vibration'] ?? true,
     ));
   }
 
   Future<void> updateBuffers(int fatherMins, int sonMins) async {
     emit(state.copyWith(fatherBufferMinutes: fatherMins, sonBufferMinutes: sonMins));
     await _medicineRepository.saveBuffers(fatherMins, sonMins);
+  }
+
+  Future<void> updateAlarmSettings({
+    double? volume,
+    String? tone,
+    int? snooze,
+    bool? vibration,
+  }) async {
+    final newState = state.copyWith(
+      alarmVolume: volume,
+      alarmTone: tone,
+      snoozeMinutes: snooze,
+      isVibrationEnabled: vibration,
+    );
+    emit(newState);
+    await _medicineRepository.saveAlarmSettings(
+      volume: newState.alarmVolume,
+      tone: newState.alarmTone,
+      snooze: newState.snoozeMinutes,
+      vibration: newState.isVibrationEnabled,
+    );
   }
 
   void _recalculateNextDose() {
@@ -227,6 +275,15 @@ class MedicineCubit extends Cubit<MedicineState> {
       isSonAlertActive: false,
       isSmsSent: false,
     ));
+
+    // إطلاق الإشعار الصوتي بناءً على إعدادات المستخدم
+    NotificationService().showAlarmNotification(
+      title: 'تنبيه موعد دواء',
+      body: 'حان الآن موعد جرعة: ${medicine.name}',
+      tone: state.alarmTone,
+      vibration: state.isVibrationEnabled,
+    );
+
     _escalationFatherTimer?.cancel();
     _escalationFatherTimer = Timer(Duration(minutes: state.fatherBufferMinutes), () => _triggerEscalationToSon());
   }
@@ -237,30 +294,32 @@ class MedicineCubit extends Cubit<MedicineState> {
     _escalationSonTimer = Timer(Duration(minutes: state.sonBufferMinutes), () => _sendBackgroundSms());
   }
 
-  // 2. تفعيل الإرسال التلقائي الصامت (Background SMS)
+  static const _smsChannel = MethodChannel('com.aoun.app/sms');
+
+  // 2. تفعيل الإرسال التلقائي الصامت (Native Background SMS via MethodChannel)
   void _sendBackgroundSms() async {
-    final phone = await _authRepository.getEmergencyPhone() ?? 'Unknown';
-    final medName = state.activeAlarmMedicine?.name ?? 'Medicine';
+    final phoneNumber = await _authRepository.getEmergencyPhone() ?? 'Unknown';
 
-    // نص رسالة صريح وبدون URL Encoding
-    final smsBody = 'عاجل عوْن: الوالد لم يؤكد تناول جرعة دواء ($medName). يرجى الاطمئنان عليه فوراً.';
+    debugPrint("---------------- NATIVE BACKGROUND SMS ----------------");
+    debugPrint("To: $phoneNumber");
+    debugPrint("Status: Initiating native silent send via MethodChannel...");
+    debugPrint("-------------------------------------------------------");
 
-    debugPrint("---------------- BACKGROUND SMS ----------------");
-    debugPrint("To: $phone");
-    debugPrint("Message: $smsBody");
-    debugPrint("Status: Initiating silent background send...");
-    debugPrint("------------------------------------------------");
-
-    if (!kIsWeb && Platform.isAndroid && phone != 'Unknown') {
-      // طلب إذن الـ SMS أولاً
-      if (await Permission.sms.request().isGranted) {
-        SmsStatus status = await BackgroundSms.sendMessage(
-          phoneNumber: phone,
-          message: smsBody,
-        );
-        debugPrint("SMS Sent Status: $status");
-      } else {
-        debugPrint("SMS Permission Denied!");
+    if (!kIsWeb && Platform.isAndroid && phoneNumber != 'Unknown') {
+      try {
+        // طلب إذن الـ SMS أولاً عبر permission_handler
+        if (await Permission.sms.request().isGranted) {
+          const platform = MethodChannel('com.aoun.app/sms');
+          await platform.invokeMethod('sendSMS', {
+            'phone': phoneNumber,
+            'message': 'تحذير من تطبيق عوْن: كبير السن لم يقم بتأكيد أخذ جرعة الدواء في الوقت المحدد.'
+          });
+          debugPrint("تم إرسال الـ SMS بنجاح في الخلفية عبر الـ Native Channel");
+        } else {
+          debugPrint("SMS Permission Denied!");
+        }
+      } catch (e) {
+        debugPrint("خطأ أثناء استدعاء ميثود الـ SMS: $e");
       }
     }
 
@@ -291,11 +350,17 @@ class MedicineCubit extends Cubit<MedicineState> {
     ));
 
     if (medicine != null) {
+      // 3. إنقاص الكمية المتبقية بمقدار 1 وتحديث Firestore
       final updatedMedicine = medicine.copyWith(
         remainingQuantity: (medicine.remainingQuantity > 0) ? medicine.remainingQuantity - 1 : 0,
       );
 
       _medicineRepository.updateMedicine(updatedMedicine);
+
+      // تنبيه نفاذ الكمية (سيظهر في الواجهة بناءً على القيمة المحدثة)
+      if (updatedMedicine.remainingQuantity <= 2) {
+        debugPrint("ALERT: ${updatedMedicine.name} is running low!");
+      }
       _medicineRepository.addActivityLog(ActivityLog(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         medicineName: medicine.name,
