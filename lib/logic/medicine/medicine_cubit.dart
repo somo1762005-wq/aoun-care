@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../core/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../data/models/medicine.dart';
 import '../../data/models/activity.dart';
 import '../../data/repositories/medicine_repository.dart';
@@ -183,12 +184,23 @@ class MedicineCubit extends Cubit<MedicineState> {
       isVibrationEnabled: vibration,
     );
     emit(newState);
-    await _medicineRepository.saveAlarmSettings(
-      volume: newState.alarmVolume,
-      tone: newState.alarmTone,
-      snooze: newState.snoozeMinutes,
-      vibration: newState.isVibrationEnabled,
-    );
+    
+    // حفظ الإعدادات مباشرة داخل الكيوبيت لضمان الاستقلالية
+    final prefs = await SharedPreferences.getInstance();
+    if (volume != null) await prefs.setDouble('alarm_volume', volume);
+    if (tone != null) await prefs.setString('alarm_tone', tone);
+    if (snooze != null) await prefs.setInt('alarm_snooze', snooze);
+    if (vibration != null) await prefs.setBool('alarm_vibrate', vibration);
+    
+    // محاولة الحفظ في Firestore أيضاً إذا كان متاحاً
+    try {
+      await _medicineRepository.saveAlarmSettings(
+        volume: newState.alarmVolume,
+        tone: newState.alarmTone,
+        snooze: newState.snoozeMinutes,
+        vibration: newState.isVibrationEnabled,
+      );
+    } catch (_) {}
   }
 
   void _recalculateNextDose() {
@@ -267,7 +279,7 @@ class MedicineCubit extends Cubit<MedicineState> {
     }
   }
 
-  void _triggerAlarm(Medicine medicine, String doseTimeLabel) {
+  void _triggerAlarm(Medicine medicine, String doseTimeLabel) async {
     emit(state.copyWith(
       isAlarmActive: true,
       activeAlarmMedicine: medicine,
@@ -276,12 +288,38 @@ class MedicineCubit extends Cubit<MedicineState> {
       isSmsSent: false,
     ));
 
-    // إطلاق الإشعار الصوتي بناءً على إعدادات المستخدم
-    NotificationService().showAlarmNotification(
-      title: 'تنبيه موعد دواء',
-      body: 'حان الآن موعد جرعة: ${medicine.name}',
-      tone: state.alarmTone,
-      vibration: state.isVibrationEnabled,
+    // إطلاق المنبه الصوتي مباشرة من داخل الكيوبيت لضمان الاستقلالية
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    
+    String? soundResource = state.alarmTone == 'default' ? null : state.alarmTone;
+
+    final androidDetails = AndroidNotificationDetails(
+      'alarm_channel_high_priority',
+      'المنبهات الصوتية لعون',
+      channelDescription: 'قناة إنذار صوتي مخصصة وقابلة للتعديل',
+      importance: Importance.max,
+      priority: Priority.high,
+      sound: soundResource != null ? RawResourceAndroidNotificationSound(soundResource) : null,
+      playSound: true,
+      enableVibration: state.isVibrationEnabled,
+      vibrationPattern: state.isVibrationEnabled ? Int64List.fromList([0, 1000, 500, 1000]) : null,
+      ongoing: true,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      999,
+      'تنبيه موعد دواء',
+      'حان الآن موعد جرعة: ${medicine.name}',
+      NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.critical,
+        ),
+      ),
     );
 
     _escalationFatherTimer?.cancel();
