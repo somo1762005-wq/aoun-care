@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'firebase_options.dart';
 import 'core/theme.dart';
 import 'core/notification_service.dart';
 import 'data/repositories/auth_repository.dart';
@@ -14,7 +15,6 @@ import 'logic/role/role_cubit.dart';
 import 'logic/medicine/medicine_cubit.dart';
 import 'logic/navigation/navigation_cubit.dart';
 import 'presentation/screens/welcome_screen.dart';
-import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/role_selection_screen.dart';
 import 'presentation/screens/father/father_dashboard.dart';
 import 'presentation/screens/son/son_dashboard.dart';
@@ -22,20 +22,23 @@ import 'presentation/screens/son/son_dashboard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bool firebaseInitialized = false;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint("Firebase initialized successfully!");
+  } catch (e, stack) {
+    debugPrint("Firebase initialization failed: $e\n$stack");
+  }
 
   try {
-    await Firebase.initializeApp();
-    firebaseInitialized = true;
-    debugPrint("Firebase initialized successfully!");
     await NotificationService().initialize();
-    
-    // طلب صلاحية التنبيهات عند فتح التطبيق لضمان عمل المنبه
-    if (!kIsWeb) {
-      await Permission.notification.request();
-    }
-  } catch (e) {
-    debugPrint("Firebase fallback activated: $e");
+  } catch (e, stack) {
+    debugPrint("NotificationService initialization failed: $e\n$stack");
+  }
+
+  if (!kIsWeb) {
+    await Permission.notification.request();
   }
 
   // إنشاء الـ Repositories بأمان
@@ -61,7 +64,7 @@ void main() async {
         providers: [
           BlocProvider<ThemeCubit>(create: (_) => ThemeCubit()),
           BlocProvider<LanguageCubit>(create: (_) => LanguageCubit()),
-          // استدعاء دالة الفحص الأوتوماتيكي عند التشغيل لتسجيل الدخول لمرة واحدة
+          // استدعاء دالة الفحص الأوتوماتيكية عند التشغيل لتسجيل الدخول لمرة واحدة
           BlocProvider<AuthCubit>(create: (_) => AuthCubit(authRepository)),
           BlocProvider<RoleCubit>(create: (_) => RoleCubit(authRepository)),
           BlocProvider<NavigationCubit>(create: (_) => NavigationCubit()),
@@ -90,9 +93,23 @@ class MyApp extends StatelessWidget {
       title: 'Aoun Care - عوْن',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
       locale: Locale(langCode),
+
+      // تفعيل الدمج الذكي للخطوط في الـ Light Theme
+      theme: AppTheme.lightTheme.copyWith(
+        textTheme: AppTheme.lightTheme.textTheme.apply(
+          fontFamily: 'ModernNo20', // الخط الأساسي للإنجليزي والأرقام
+          fontFamilyFallback: const ['AppleEmoji'],
+        ),
+      ),
+
+      // تفعيل الدمج الذكي للخطوط في الـ Dark Theme
+      darkTheme: AppTheme.darkTheme.copyWith(
+        textTheme: AppTheme.darkTheme.textTheme.apply(
+          fontFamily: 'ModernNo20', // الخط الأساسي للإنجليزي والأرقام
+          fontFamilyFallback: const ['AppleEmoji'],
+        ),
+      ),
       home: const AuthWrapper(),
     );
   }

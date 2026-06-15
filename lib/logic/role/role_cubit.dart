@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -49,7 +50,7 @@ class RoleCubit extends Cubit<UserRole> {
     // لضمان عدم تعليق الشاشة وتجنب الـ Deadlocks
     _authRepository.saveRole(roleStr).catchError((e) {
       // تسجيل الخطأ فقط في حالة الفشل دون التأثير على المستخدم
-      print("Background save error: $e");
+      debugPrint("Background save error: $e");
     });
   }
 

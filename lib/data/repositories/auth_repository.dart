@@ -35,6 +35,10 @@ class AuthRepository {
   static const String keyPhone = 'son_phone';
   static const String keyIsLoggedIn = 'is_logged_in';
 
+  // مفاتيح جديدة لحفظ بيانات الدخول بصفة دائمة حتى بعد تسجيل الخروج أو حذف التطبيق
+  static const String keySavedEmail = 'saved_user_email';
+  static const String keySavedPassword = 'saved_user_password';
+
   final _authStateController = StreamController<String?>.broadcast();
   Stream<String?> get authStateChanges => _authStateController.stream;
 
@@ -55,7 +59,6 @@ class AuthRepository {
       if (_isFirebaseEnabled && _firebaseAuth != null) {
         _firebaseAuth!.authStateChanges().listen((user) async {
           if (user != null) {
-            // جلب البيانات فوراً عند كشف المستخدم وضمان تحديث الـ SharedPreferences
             await _syncUserData(user);
             _authStateController.add(user.email);
             NotificationService().uploadFcmToken();
@@ -109,13 +112,20 @@ class AuthRepository {
       final credential = await _firebaseAuth!.signInWithEmailAndPassword(email: email, password: password);
       if (credential.user != null) {
         await _syncUserData(credential.user!);
-        // ننتظر قليلاً لضمان حفظ البيانات في SharedPreferences قبل العودة
+
+        // حفظ البريد والرقم السري محلياً فور نجاح الدخول لكي لا يضيعوا أبداً
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(keySavedEmail, email.trim());
+        await prefs.setString(keySavedPassword, password);
+
         await Future.delayed(const Duration(milliseconds: 500));
       }
     } else {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(keyIsLoggedIn, true);
       await prefs.setString(keyEmail, email);
+      await prefs.setString(keySavedEmail, email.trim());
+      await prefs.setString(keySavedPassword, password);
       _authStateController.add(email);
     }
   }
@@ -131,6 +141,12 @@ class AuthRepository {
           'createdAt': fs.FieldValue.serverTimestamp(),
           'role': 'none',
         });
+
+        // حفظ البيانات عند التسجيل الجديد أيضاً
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(keySavedEmail, email.trim());
+        await prefs.setString(keySavedPassword, password);
+
         await _syncUserData(user);
       }
     } else {
@@ -138,21 +154,44 @@ class AuthRepository {
       await prefs.setBool(keyIsLoggedIn, true);
       await prefs.setString(keyEmail, email);
       await prefs.setString(keyPhone, phone);
+      await prefs.setString(keySavedEmail, email.trim());
+      await prefs.setString(keySavedPassword, password);
       _authStateController.add(email);
     }
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+    // نقوم بحذف حالة الجلسة الحالية فقط لتوجيهه لصفحة الدخول
     await prefs.remove(keyIsLoggedIn);
     await prefs.remove(keyRole);
     await prefs.remove(keyEmail);
+
+    // ملاحظة: لم نقم بحذف keySavedEmail و keySavedPassword لكي تبقى الحقول ممتلئة وجاهزة تلقائياً
 
     if (_isFirebaseEnabled && _firebaseAuth != null) {
       await _firebaseAuth!.signOut();
     } else {
       _authStateController.add(null);
     }
+  }
+
+  // دالتين لمساعدتك في جلب البيانات المحفوظة وعرضها تلقائياً بداخل الـ TextFields في شاشة الدخول
+  Future<String?> getSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(keySavedEmail);
+  }
+
+  Future<String?> getSavedPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(keySavedPassword);
+  }
+
+  // دالة اختيارية إذا رغبت يوماً ما في تصفير البيانات المحفوظة تماماً
+  Future<void> clearSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(keySavedEmail);
+    await prefs.remove(keySavedPassword);
   }
 
   Future<void> saveRole(String role) async {

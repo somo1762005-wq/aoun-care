@@ -6,6 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart' as fs;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/localization.dart';
 import '../../../core/theme.dart';
+import '../../../core/services/sms_service.dart'; // استيراد خدمة الـ SMS الجديدة
+import '../../../data/repositories/auth_repository.dart'; // استيراد الـ Repository لجلب رقم الابن
 import '../../../logic/medicine/medicine_cubit.dart';
 import '../../../logic/language/language_cubit.dart';
 import '../../../logic/auth/auth_cubit.dart';
@@ -80,7 +82,6 @@ class _FatherDashboardState extends State<FatherDashboard> {
     final seconds = duration.inSeconds.remainder(60);
 
     if (langCode == 'ar') {
-      // إصلاح الترتيب العربي الصحيح والمريح للقراءة
       return '$minutes دقائق و $seconds ثواني';
     }
 
@@ -98,7 +99,6 @@ class _FatherDashboardState extends State<FatherDashboard> {
 
         return Scaffold(
           appBar: ThemeLanguageHeader(
-            // 1. تغيير عنوان الـ AppBar ليصبح "واجهة الأب" بالعربية
             titleKey: langCode == 'ar' ? 'واجهة الأب' : 'father_dashboard',
             extraActions: [
               IconButton(
@@ -130,7 +130,7 @@ class _FatherDashboardState extends State<FatherDashboard> {
                   padding: const EdgeInsets.all(24.0),
                   child: Column(
                     children: [
-                      // Header
+                      // Header Card
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
@@ -165,48 +165,118 @@ class _FatherDashboardState extends State<FatherDashboard> {
                         ),
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
-                      // Countdown
+                      // Countdown & SOS Button View
                       Expanded(
                         child: Center(
-                          child: Container(
-                            width: 280,
-                            height: 280,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 4),
-                            ),
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.access_time_filled_rounded, color: AppColors.primary, size: 64),
-                                const SizedBox(height: 16),
-                                if (hasNextDose) ...[
-                                  Text(
-                                    AppLocalization.translate('next_dose_in', langCode),
-                                    style: const TextStyle(fontSize: 18),
+                                // 1. العداد الدائري الأصلي الخاص بك
+                                Container(
+                                  width: 250,
+                                  height: 250,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 4),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    state.nextDoseMedicine!.name,
-                                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                                    textAlign: TextAlign.center,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.access_time_filled_rounded, color: AppColors.primary, size: 54),
+                                      const SizedBox(height: 12),
+                                      if (hasNextDose) ...[
+                                        Text(
+                                          AppLocalization.translate('next_dose_in', langCode),
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          state.nextDoseMedicine!.name,
+                                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          _formatDuration(state.nextDoseCountdown!, langCode),
+                                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ] else ...[
+                                        Text(
+                                          AppLocalization.translate('no_upcoming_doses', langCode),
+                                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _formatDuration(state.nextDoseCountdown!, langCode),
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primary),
-                                    textAlign: TextAlign.center,
+                                ),
+
+                                const SizedBox(height: 40),
+
+                                // 2. زر الطوارئ الكبير والأحمر (SOS) مع توهج نبضي مريح للعين
+                                GestureDetector(
+                                  onTap: () async {
+                                    final authRepo = context.read<AuthRepository>();
+                                    String? sonPhone = await authRepo.getEmergencyPhone();
+
+                                    if (sonPhone != null && sonPhone.isNotEmpty) {
+                                      await SmsService.sendEmergencySms(
+                                        phoneNumber: sonPhone,
+                                        message: langCode == 'ar'
+                                            ? "🚨 نداء استغاثة عاجل من الوالد! أنا أحتاج المساعدة فوراً، الرجاء القدوم أو الاتصال بي. 🚨"
+                                            : "🚨 Urgent emergency appeal from Father! I need help immediately, please come or call me. 🚨",
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            langCode == 'ar'
+                                                ? 'الرجاء إضافة رقم هاتف الابن في الإعدادات أولاً!'
+                                                : 'Please add the son\'s phone number in settings first!',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    width: 135,
+                                    height: 135,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade700,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.red.shade700.withValues(alpha: 0.35),
+                                          blurRadius: 20,
+                                          spreadRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.gpp_maybe_rounded, color: Colors.white, size: 40),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          langCode == 'ar' ? "طوارئ\nSOS" : "EMERGENCY\nSOS",
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 15,
+                                            height: 1.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ] else ...[
-                                  Text(
-                                    AppLocalization.translate('no_upcoming_doses', langCode),
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
+                                ),
                               ],
                             ),
                           ),

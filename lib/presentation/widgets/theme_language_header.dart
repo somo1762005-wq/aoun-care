@@ -29,7 +29,7 @@ class ThemeLanguageHeader extends StatelessWidget implements PreferredSizeWidget
         style: const TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 20,
-          fontFamily: 'SFPro', // التأكيد على خط الآيفون للعنوان
+          fontFamily: 'ModernNo20', // التأكيد على خط الآيفون للعنوان
         ),
       ),
       leading: showBackButton
@@ -58,7 +58,7 @@ class ThemeLanguageHeader extends StatelessWidget implements PreferredSizeWidget
             style: TextStyle(
               fontSize: 15, // حجم موزون ومثالي للقراءة
               fontWeight: FontWeight.w700,
-              fontFamily: 'SFPro',
+              fontFamily: 'ModernNo20',
               color: Theme.of(context).primaryColor,
             ),
           ),

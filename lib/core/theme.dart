@@ -28,7 +28,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: 'SFPro', // 👈 تفعيل خط الآيفون كخط أساسي للوضع المضيء
+      fontFamily: 'ModernNo20', // 👈 تفعيل خط الآيفون كخط أساسي للوضع المضيء
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.bgLight,
       cardColor: AppColors.cardLight,
@@ -42,7 +42,7 @@ class AppTheme {
       ),
       // تعديل تنسيق النصوص ليعتمد على خط الآيفون مع الحفاظ على ألوان كودك الأصلية
       textTheme: const TextTheme().apply(
-        fontFamily: 'SFPro',
+        fontFamily: 'ModernNo20',
         bodyColor: AppColors.textPrimaryLight,
         displayColor: AppColors.textPrimaryLight,
       ),
@@ -76,7 +76,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'SFPro'),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'ModernNo20'),
         ),
       ),
     );
@@ -86,7 +86,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: 'SFPro', // 👈 تفعيل خط الآيفون كخط أساسي للوضع المظلم
+      fontFamily: 'ModernNo20', // 👈 تفعيل خط الآيفون كخط أساسي للوضع المظلم
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.bgDark,
       cardColor: AppColors.cardDark,
@@ -100,7 +100,7 @@ class AppTheme {
       ),
       // تعديل تنسيق النصوص للوضع المظلم
       textTheme: const TextTheme().apply(
-        fontFamily: 'SFPro',
+        fontFamily: 'ModernNo20',
         bodyColor: AppColors.textPrimaryDark,
         displayColor: AppColors.textPrimaryDark,
       ),
@@ -134,7 +134,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'SFPro'),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'ModernNo20'),
         ),
       ),
     );

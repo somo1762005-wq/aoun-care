@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data'; // تم إضافة هذا الاستيراد لحل مشكلة الـ Int64List تلقائياً
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -116,6 +117,7 @@ class MedicineCubit extends Cubit<MedicineState> {
   Timer? _countdownTimer;
   Timer? _escalationFatherTimer;
   Timer? _escalationSonTimer;
+  Timer? _snoozeTimer; // تايمر خاص بإدارة وقت الغفوة
 
   MedicineCubit({
     required MedicineRepository medicineRepository,
@@ -139,10 +141,8 @@ class MedicineCubit extends Cubit<MedicineState> {
 
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (user != null) {
-        // ننتظر قليلاً للتأكد من أن AuthRepository قد قام بمزامنة البيانات الأساسية
         await Future.delayed(const Duration(seconds: 1));
         await _loadBuffers();
-        // إعادة تهيئة الاستماع عند تغيير المستخدم لضمان جلب البيانات الجديدة
         _medicineRepository.refreshStreams();
       }
     });
@@ -154,10 +154,8 @@ class MedicineCubit extends Cubit<MedicineState> {
 
   Future<void> _loadBuffers() async {
     final buffers = await _medicineRepository.getBuffers();
-    
-    // تحميل الإعدادات مباشرة من SharedPreferences لضمان الاستقلالية
     final prefs = await SharedPreferences.getInstance();
-    
+
     emit(state.copyWith(
       fatherBufferMinutes: buffers['father'] ?? 30,
       sonBufferMinutes: buffers['son'] ?? 10,
@@ -186,15 +184,12 @@ class MedicineCubit extends Cubit<MedicineState> {
       isVibrationEnabled: vibration,
     );
     emit(newState);
-    
-    // حفظ الإعدادات مباشرة داخل الكيوبيت لضمان الاستقلالية
+
     final prefs = await SharedPreferences.getInstance();
     if (volume != null) await prefs.setDouble('alarm_volume', volume);
     if (tone != null) await prefs.setString('alarm_tone', tone);
     if (snooze != null) await prefs.setInt('alarm_snooze', snooze);
     if (vibration != null) await prefs.setBool('alarm_vibrate', vibration);
-    
-    // تمت إزالة استدعاء المستودع الخارجي لضمان استقلال الملف وعدم حدوث أخطاء بناء
   }
 
   void _recalculateNextDose() {
@@ -282,9 +277,7 @@ class MedicineCubit extends Cubit<MedicineState> {
       isSmsSent: false,
     ));
 
-    // إطلاق المنبه الصوتي مباشرة من داخل الكيوبيت لضمان الاستقلالية
     final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    
     String? soundResource = state.alarmTone == 'default' ? null : state.alarmTone;
 
     final androidDetails = AndroidNotificationDetails(
@@ -322,6 +315,37 @@ class MedicineCubit extends Cubit<MedicineState> {
     _escalationFatherTimer = Timer(Duration(minutes: state.fatherBufferMinutes), () => _triggerEscalationToSon());
   }
 
+  // دالة الغفوة (Snooze) المضافة لربط شاشة المنبه بالـ Cubit بشكل كامل وسليم
+  void snoozeAlarm() async {
+    _escalationFatherTimer?.cancel();
+    _escalationSonTimer?.cancel();
+
+    // إيقاف صوت الإشعار الحالي فوراً عند طلب التأجيل
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    await flutterLocalNotificationsPlugin.cancel(999);
+
+    final currentMedicine = state.activeAlarmMedicine;
+    final currentTimeLabel = state.activeAlarmTimeLabel;
+
+    emit(state.copyWith(
+      isAlarmActive: false,
+      activeAlarmMedicine: null,
+      activeAlarmTimeLabel: null,
+      isSonAlertActive: false,
+      isSmsSent: false,
+    ));
+
+    if (currentMedicine != null) {
+      // إذا كانت دقائق الغفوة 0 في الإعدادات، نعتبر الغفوة الافتراضية 5 دقائق
+      final minutes = state.snoozeMinutes > 0 ? state.snoozeMinutes : 5;
+      _snoozeTimer?.cancel();
+      _snoozeTimer = Timer(Duration(minutes: minutes), () {
+        _triggerAlarm(currentMedicine, currentTimeLabel ?? 'Snooze');
+      });
+      debugPrint("تم تأجيل منبه دواء ${currentMedicine.name} لمدة $minutes دقائق.");
+    }
+  }
+
   void _triggerEscalationToSon() {
     emit(state.copyWith(isSonAlertActive: true));
     _escalationSonTimer?.cancel();
@@ -330,7 +354,6 @@ class MedicineCubit extends Cubit<MedicineState> {
 
   static const _smsChannel = MethodChannel('com.aoun.app/sms');
 
-  // 2. تفعيل الإرسال التلقائي الصامت (Native Background SMS via MethodChannel)
   void _sendBackgroundSms() async {
     final phoneNumber = await _authRepository.getEmergencyPhone() ?? 'Unknown';
 
@@ -341,10 +364,8 @@ class MedicineCubit extends Cubit<MedicineState> {
 
     if (!kIsWeb && Platform.isAndroid && phoneNumber != 'Unknown') {
       try {
-        // طلب إذن الـ SMS أولاً عبر permission_handler
         if (await Permission.sms.request().isGranted) {
-          const platform = MethodChannel('com.aoun.app/sms');
-          await platform.invokeMethod('sendSMS', {
+          await _smsChannel.invokeMethod('sendSMS', {
             'phone': phoneNumber,
             'message': 'تحذير من تطبيق عوْن: كبير السن لم يقم بتأكيد أخذ جرعة الدواء في الوقت المحدد.'
           });
@@ -372,6 +393,11 @@ class MedicineCubit extends Cubit<MedicineState> {
   Future<void> confirmDoseTaken() async {
     _escalationFatherTimer?.cancel();
     _escalationSonTimer?.cancel();
+    _snoozeTimer?.cancel(); // إلغاء أي تايمر غفوة نشط عند أخذ الدواء فعلياً
+
+    // إيقاف صوت الإشعار والمنبه الحالي فوراً عند الضغط على تأكيد
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    await flutterLocalNotificationsPlugin.cancel(999);
 
     final medicine = state.activeAlarmMedicine;
 
@@ -384,14 +410,12 @@ class MedicineCubit extends Cubit<MedicineState> {
     ));
 
     if (medicine != null) {
-      // 3. إنقاص الكمية المتبقية بمقدار 1 وتحديث Firestore
       final updatedMedicine = medicine.copyWith(
         remainingQuantity: (medicine.remainingQuantity > 0) ? medicine.remainingQuantity - 1 : 0,
       );
 
       _medicineRepository.updateMedicine(updatedMedicine);
 
-      // تنبيه نفاذ الكمية (سيظهر في الواجهة بناءً على القيمة المحدثة)
       if (updatedMedicine.remainingQuantity <= 2) {
         debugPrint("ALERT: ${updatedMedicine.name} is running low!");
       }
@@ -424,6 +448,7 @@ class MedicineCubit extends Cubit<MedicineState> {
     _countdownTimer?.cancel();
     _escalationFatherTimer?.cancel();
     _escalationSonTimer?.cancel();
+    _snoozeTimer?.cancel(); // إغلاق تايمر الغفوة بأمان عند تدمير الكيوبيت
     return super.close();
   }
 }

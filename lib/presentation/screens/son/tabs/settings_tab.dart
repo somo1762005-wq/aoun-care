@@ -23,24 +23,6 @@ class _SettingsTabState extends State<SettingsTab> {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
-  void dispose() {
-    _phoneController.dispose();
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  void _previewTone(String tone) async {
-    if (tone == 'default') return;
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.play(AssetSource('raw/$tone.mp3'));
-      Future.delayed(const Duration(seconds: 2), () => _audioPlayer.stop());
-    } catch (e) {
-      debugPrint("Error previewing tone: $e");
-    }
-  }
-
-  @override
   void initState() {
     super.initState();
     final medState = context.read<MedicineCubit>().state;
@@ -61,7 +43,19 @@ class _SettingsTabState extends State<SettingsTab> {
   @override
   void dispose() {
     _phoneController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _previewTone(String tone) async {
+    if (tone == 'default') return;
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.play(AssetSource('raw/$tone.mp3'));
+      Future.delayed(const Duration(seconds: 2), () => _audioPlayer.stop());
+    } catch (e) {
+      debugPrint("Error previewing tone: $e");
+    }
   }
 
   // إصلاح دالة المشاركة مع إضافة Debugging
@@ -341,9 +335,9 @@ class _SettingsTabState extends State<SettingsTab> {
                           children: [
                             const Divider(),
                             Text(
-                              langCode == 'ar' 
-                                ? 'مستوى صوت المنبه: ${(state.alarmVolume * 100).round()}%'
-                                : 'Alarm Volume: ${(state.alarmVolume * 100).round()}%',
+                              langCode == 'ar'
+                                  ? 'مستوى صوت المنبه: ${(state.alarmVolume * 100).round()}%'
+                                  : 'Alarm Volume: ${(state.alarmVolume * 100).round()}%',
                               style: const TextStyle(fontSize: 14),
                             ),
                             Slider(
@@ -353,7 +347,7 @@ class _SettingsTabState extends State<SettingsTab> {
                               activeColor: Colors.blue,
                               onChanged: (val) => medCubit.updateAlarmSettings(volume: val / 100),
                             ),
-                            
+
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               activeColor: Colors.blue,
@@ -361,49 +355,49 @@ class _SettingsTabState extends State<SettingsTab> {
                               value: state.isVibrationEnabled,
                               onChanged: (val) => medCubit.updateAlarmSettings(vibration: val),
                             ),
-                            
+
                             const SizedBox(height: 8),
-	                            DropdownButtonFormField<String>(
-	                              value: state.alarmTone == 'default' ? 'default_tone' : (state.alarmTone == 'sharp' ? 'calm_bell' : 'strong_alarm'),
-	                              decoration: InputDecoration(
-	                                labelText: langCode == 'ar' ? 'نغمة المنبه' : 'Alarm Tone',
-	                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-	                              ),
-	                              items: [
-	                                DropdownMenuItem(value: 'strong_alarm', child: Text(langCode == 'ar' ? 'إنذار قوي ومتكرر' : 'Strong & Repeated')),
-	                                DropdownMenuItem(value: 'calm_bell', child: Text(langCode == 'ar' ? 'جرس هادئ' : 'Calm Bell')),
-	                                DropdownMenuItem(value: 'default_tone', child: Text(langCode == 'ar' ? 'النغمة الافتراضية' : 'Default Tone')),
-	                              ],
-	                              onChanged: (val) {
-	                                String mappedTone = 'default';
-	                                if (val == 'strong_alarm') mappedTone = 'repeated';
-	                                if (val == 'calm_bell') mappedTone = 'sharp';
-	                                medCubit.updateAlarmSettings(tone: mappedTone);
-	                                _previewTone(mappedTone);
-	                              },
-	                            ),
-	                            const SizedBox(height: 16),
-	                            DropdownButtonFormField<int>(
-	                              value: state.snoozeMinutes,
-	                              decoration: InputDecoration(
-	                                labelText: langCode == 'ar' ? 'وقت الغفوة/التكرار' : 'Snooze/Repeat Time',
-	                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-	                              ),
-	                              items: [
-	                                DropdownMenuItem(value: 0, child: Text(langCode == 'ar' ? 'بدون تكرار' : 'No Snooze')),
-	                                DropdownMenuItem(value: 3, child: Text(langCode == 'ar' ? 'كل 3 دقائق' : 'Every 3 min')),
-	                                DropdownMenuItem(value: 5, child: Text(langCode == 'ar' ? 'كل 5 دقائق' : 'Every 5 min')),
-	                                DropdownMenuItem(value: 10, child: Text(langCode == 'ar' ? 'كل 10 دقائق' : 'Every 10 min')),
-	                              ],
-	                              onChanged: (val) => medCubit.updateAlarmSettings(snooze: val),
-	                            ),
-	                            SwitchListTile(
-	                              contentPadding: EdgeInsets.zero,
-	                              activeColor: Colors.blue,
-	                              title: Text(langCode == 'ar' ? 'تفعيل الصوت التصاعدي' : 'Enable Ascending Volume'),
-	                              value: false,
-	                              onChanged: (val) {},
-	                            ),
+                            DropdownButtonFormField<String>(
+                              value: state.alarmTone == 'default' ? 'default_tone' : (state.alarmTone == 'sharp' ? 'calm_bell' : 'strong_alarm'),
+                              decoration: InputDecoration(
+                                labelText: langCode == 'ar' ? 'نغمة المنبه' : 'Alarm Tone',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              items: [
+                                DropdownMenuItem(value: 'strong_alarm', child: Text(langCode == 'ar' ? 'إنذار قوي ومتكرر' : 'Strong & Repeated')),
+                                DropdownMenuItem(value: 'calm_bell', child: Text(langCode == 'ar' ? 'جرس هادئ' : 'Calm Bell')),
+                                DropdownMenuItem(value: 'default_tone', child: Text(langCode == 'ar' ? 'النغمة الافتراضية' : 'Default Tone')),
+                              ],
+                              onChanged: (val) {
+                                String mappedTone = 'default';
+                                if (val == 'strong_alarm') mappedTone = 'repeated';
+                                if (val == 'calm_bell') mappedTone = 'sharp';
+                                medCubit.updateAlarmSettings(tone: mappedTone);
+                                _previewTone(mappedTone);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<int>(
+                              value: state.snoozeMinutes,
+                              decoration: InputDecoration(
+                                labelText: langCode == 'ar' ? 'وقت الغفوة/التكرار' : 'Snooze/Repeat Time',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              items: [
+                                DropdownMenuItem(value: 0, child: Text(langCode == 'ar' ? 'بدون تكرار' : 'No Snooze')),
+                                DropdownMenuItem(value: 3, child: Text(langCode == 'ar' ? 'كل 3 دقائق' : 'Every 3 min')),
+                                DropdownMenuItem(value: 5, child: Text(langCode == 'ar' ? 'كل 5 دقائق' : 'Every 5 min')),
+                                DropdownMenuItem(value: 10, child: Text(langCode == 'ar' ? 'كل 10 دقائق' : 'Every 10 min')),
+                              ],
+                              onChanged: (val) => medCubit.updateAlarmSettings(snooze: val),
+                            ),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              activeColor: Colors.blue,
+                              title: Text(langCode == 'ar' ? 'تفعيل الصوت التصاعدي' : 'Enable Ascending Volume'),
+                              value: false,
+                              onChanged: (val) {},
+                            ),
                           ],
                         );
                       },

@@ -11,9 +11,13 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  static const String _defaultIcon = '@mipmap/launcher_icon';
+  static const String _alertsChannelId = 'aoun_channel';
+  static const String _alarmChannelId = 'alarm_channel_high_priority';
+
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-  
+
   bool _isInitialized = false;
 
   Future<void> initialize() async {
@@ -21,12 +25,10 @@ class NotificationService {
 
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       try {
-        // Request permissions
         await requestPermissions();
 
-        // Local notifications setup
         const AndroidInitializationSettings androidSettings =
-            AndroidInitializationSettings('@mipmap/ic_launcher');
+            AndroidInitializationSettings(_defaultIcon);
         const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,
@@ -45,34 +47,42 @@ class NotificationService {
           },
         );
 
-        // Create android notification channel
-        const AndroidNotificationChannel channel = AndroidNotificationChannel(
-          'aoun_channel', // id
-          'Aoun Alerts', // title
+        final androidPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+        const AndroidNotificationChannel alertsChannel = AndroidNotificationChannel(
+          _alertsChannelId,
+          'Aoun Alerts',
           description: 'Notifications for medicine doses and tracking alerts',
           importance: Importance.max,
           playSound: true,
         );
 
-        await _localNotifications
-            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-            ?.createNotificationChannel(channel);
+        const AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
+          _alarmChannelId,
+          'Aoun Alarm Alerts',
+          description: 'High-priority medicine alarm notifications',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        );
 
-        // FCM foreground listener
+        await androidPlugin?.createNotificationChannel(alertsChannel);
+        await androidPlugin?.createNotificationChannel(alarmChannel);
+
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
           debugPrint("Foreground message received: ${message.notification?.title}");
           _showLocalNotification(message);
         });
 
-        // FCM background click listener
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
           debugPrint("Notification opened app: ${message.notification?.title}");
         });
 
         _isInitialized = true;
         debugPrint("NotificationService initialized successfully!");
-      } catch (e) {
-        debugPrint("NotificationService initialization error: $e");
+      } catch (e, stack) {
+        debugPrint("NotificationService initialization error: $e\n$stack");
       }
     }
   }
@@ -101,12 +111,12 @@ class NotificationService {
         notification.body,
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'aoun_channel',
+            _alertsChannelId,
             'Aoun Alerts',
             channelDescription: 'Notifications for medicine doses and tracking alerts',
             importance: Importance.max,
             priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
+            icon: _defaultIcon,
           ),
           iOS: DarwinNotificationDetails(
             presentAlert: true,
@@ -119,22 +129,21 @@ class NotificationService {
     }
   }
 
-  // إطلاق منبه الطوارئ المخصص
   Future<void> showAlarmNotification({
     required String title,
     required String body,
     required String tone,
     required bool vibration,
   }) async {
-    // تحديد النغمة (يجب إضافة الملفات في android/app/src/main/res/raw)
-    String? soundResource = tone == 'default' ? null : tone;
+    final String? soundResource = tone == 'default' ? null : tone;
 
-    AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'alarm_channel_high_priority',
-      'المنبهات الصوتية لعون',
-      channelDescription: 'قناة إنذار صوتي مخصصة وقابلة للتعديل',
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      _alarmChannelId,
+      'Aoun Alarm Alerts',
+      channelDescription: 'High-priority medicine alarm notifications',
       importance: Importance.max,
       priority: Priority.high,
+      icon: _defaultIcon,
       sound: soundResource != null ? RawResourceAndroidNotificationSound(soundResource) : null,
       playSound: true,
       enableVibration: vibration,
@@ -142,10 +151,12 @@ class NotificationService {
       ongoing: true,
       fullScreenIntent: true,
       category: AndroidNotificationCategory.alarm,
+      visibility: NotificationVisibility.public,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
     );
 
     await _localNotifications.show(
-      999, // ID ثابت لمنبه الطوارئ
+      999,
       title,
       body,
       NotificationDetails(

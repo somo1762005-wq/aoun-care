@@ -1,5 +1,5 @@
 name: aoun_new
-description: "A new Flutter project."
+description: "Aoun Care - healthcare companion app."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -21,25 +21,34 @@ dependencies:
   firebase_auth: ^5.7.0
   cloud_firestore: ^5.6.12
   geolocator: ^13.0.1
-  url_launcher: ^6.3.1
+  url_launcher: ^6.3.2
   share_plus: ^10.1.0
-
   permission_handler: ^11.3.1
   firebase_messaging: ^15.2.10
   flutter_local_notifications: ^18.0.1
+  audioplayers: ^6.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: "^0.13.1"
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/icon/icon.png
   fonts:
-    - family: SFPro
+    - family: ModernNo20
       fonts:
-        - asset: assets/fonts/SFPro-Regular.ttf
-        - asset: assets/fonts/SFPro-Bold.ttf
-          weight: 700
+        - asset: assets/fonts/ModernNo20.ttf
+    - family: AppleEmoji
+      fonts:
+        - asset: assets/fonts/apple_color_emoji.ttf
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21

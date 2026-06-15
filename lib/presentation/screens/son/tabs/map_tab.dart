@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart'; // تم إضافة الاستيراد هنا بأمان
 import '../../../../core/localization.dart';
 import '../../../../core/theme.dart';
 import '../../../../logic/language/language_cubit.dart';
@@ -146,6 +147,31 @@ class _MapTabState extends State<MapTab> {
           });
         }
       });
+    }
+  }
+
+  // الدالة الجديدة لفتح تطبيق خرائط جوجل وحساب وقت الوصول والاتجاهات حركياً
+  Future<void> _openGoogleMapsDirections() async {
+    // رابط يوجه تطبيق الخرائط لتحديد مسار قيادة مباشرة إلى موقع الأب الحالي
+    final Uri googleMapsUrl = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$_lat,$_lng&travelmode=driving'
+    );
+
+    try {
+      if (await canLaunchUrl(googleMapsUrl)) {
+        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+      } else {
+        // في حال فشل الفتح المباشر، يتم الفتح عبر المتصفح كخيار احتياطي آمن
+        final Uri webMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$_lat,$_lng');
+        await launchUrl(webMapsUrl, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint("Could not launch Google Maps: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح تطبيق الخرائط حالياً')),
+        );
+      }
     }
   }
 
@@ -338,7 +364,26 @@ class _MapTabState extends State<MapTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+
+                // زر التوجيه لخرائط جوجل الجديد والمصمم بشكل بارز ومريح
+                ElevatedButton.icon(
+                  onPressed: _openGoogleMapsDirections,
+                  icon: const Icon(Icons.directions_car_rounded, size: 20, color: Colors.white),
+                  label: Text(
+                    langCode == 'ar' ? 'فتح في خرائط جوجل (وقت الوصول)' : 'Open Google Maps (ETA)',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green, // لون مميز للخرائط والتوجيه
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
                 ElevatedButton.icon(
                   onPressed: _refreshLocation,
                   icon: const Icon(Icons.my_location_rounded, size: 18),
