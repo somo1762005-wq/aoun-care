@@ -29,8 +29,8 @@ class MedicineState {
   final bool isSmsSent;
   final List<String> smsLogs;
 
-  final int fatherBufferMinutes;
-  final int sonBufferMinutes;
+  final int careRecipientBufferMinutes;
+  final int caregiverBufferMinutes;
 
   // إعدادات المنبه
   final double alarmVolume;
@@ -53,8 +53,8 @@ class MedicineState {
     this.isSonAlertActive = false,
     this.isSmsSent = false,
     this.smsLogs = const [],
-    this.fatherBufferMinutes = 30,
-    this.sonBufferMinutes = 10,
+    this.careRecipientBufferMinutes = 30,
+    this.caregiverBufferMinutes = 10,
     this.alarmVolume = 1.0,
     this.alarmTone = 'default',
     this.snoozeMinutes = 0,
@@ -75,8 +75,8 @@ class MedicineState {
     bool? isSonAlertActive,
     bool? isSmsSent,
     List<String>? smsLogs,
-    int? fatherBufferMinutes,
-    int? sonBufferMinutes,
+    int? careRecipientBufferMinutes,
+    int? caregiverBufferMinutes,
     double? alarmVolume,
     String? alarmTone,
     int? snoozeMinutes,
@@ -96,8 +96,8 @@ class MedicineState {
       isSonAlertActive: isSonAlertActive ?? this.isSonAlertActive,
       isSmsSent: isSmsSent ?? this.isSmsSent,
       smsLogs: smsLogs ?? this.smsLogs,
-      fatherBufferMinutes: fatherBufferMinutes ?? this.fatherBufferMinutes,
-      sonBufferMinutes: sonBufferMinutes ?? this.sonBufferMinutes,
+      careRecipientBufferMinutes: careRecipientBufferMinutes ?? this.careRecipientBufferMinutes,
+      caregiverBufferMinutes: caregiverBufferMinutes ?? this.caregiverBufferMinutes,
       alarmVolume: alarmVolume ?? this.alarmVolume,
       alarmTone: alarmTone ?? this.alarmTone,
       snoozeMinutes: snoozeMinutes ?? this.snoozeMinutes,
@@ -115,8 +115,8 @@ class MedicineCubit extends Cubit<MedicineState> {
   StreamSubscription? _logsSubscription;
   StreamSubscription? _authSubscription;
   Timer? _countdownTimer;
-  Timer? _escalationFatherTimer;
-  Timer? _escalationSonTimer;
+  Timer? _escalationCareRecipientTimer;
+  Timer? _escalationCaregiverTimer;
   Timer? _snoozeTimer; // تايمر خاص بإدارة وقت الغفوة
 
   MedicineCubit({
@@ -157,8 +157,8 @@ class MedicineCubit extends Cubit<MedicineState> {
     final prefs = await SharedPreferences.getInstance();
 
     emit(state.copyWith(
-      fatherBufferMinutes: buffers['father'] ?? 30,
-      sonBufferMinutes: buffers['son'] ?? 10,
+      careRecipientBufferMinutes: buffers['father'] ?? 30,
+      caregiverBufferMinutes: buffers['son'] ?? 10,
       alarmVolume: prefs.getDouble('alarm_volume') ?? 1.0,
       alarmTone: prefs.getString('alarm_tone') ?? 'default',
       snoozeMinutes: prefs.getInt('alarm_snooze') ?? 0,
@@ -166,9 +166,9 @@ class MedicineCubit extends Cubit<MedicineState> {
     ));
   }
 
-  Future<void> updateBuffers(int fatherMins, int sonMins) async {
-    emit(state.copyWith(fatherBufferMinutes: fatherMins, sonBufferMinutes: sonMins));
-    await _medicineRepository.saveBuffers(fatherMins, sonMins);
+  Future<void> updateBuffers(int careRecipientMins, int caregiverMins) async {
+    emit(state.copyWith(careRecipientBufferMinutes: careRecipientMins, caregiverBufferMinutes: caregiverMins));
+    await _medicineRepository.saveBuffers(careRecipientMins, caregiverMins);
   }
 
   Future<void> updateAlarmSettings({
@@ -311,14 +311,14 @@ class MedicineCubit extends Cubit<MedicineState> {
       ),
     );
 
-    _escalationFatherTimer?.cancel();
-    _escalationFatherTimer = Timer(Duration(minutes: state.fatherBufferMinutes), () => _triggerEscalationToSon());
+    _escalationCareRecipientTimer?.cancel();
+    _escalationCareRecipientTimer = Timer(Duration(minutes: state.careRecipientBufferMinutes), () => _triggerEscalationToCaregiver());
   }
 
   // دالة الغفوة (Snooze) المضافة لربط شاشة المنبه بالـ Cubit بشكل كامل وسليم
   void snoozeAlarm() async {
-    _escalationFatherTimer?.cancel();
-    _escalationSonTimer?.cancel();
+    _escalationCareRecipientTimer?.cancel();
+    _escalationCaregiverTimer?.cancel();
 
     // إيقاف صوت الإشعار الحالي فوراً عند طلب التأجيل
     final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -346,10 +346,10 @@ class MedicineCubit extends Cubit<MedicineState> {
     }
   }
 
-  void _triggerEscalationToSon() {
+  void _triggerEscalationToCaregiver() {
     emit(state.copyWith(isSonAlertActive: true));
-    _escalationSonTimer?.cancel();
-    _escalationSonTimer = Timer(Duration(minutes: state.sonBufferMinutes), () => _sendBackgroundSms());
+    _escalationCaregiverTimer?.cancel();
+    _escalationCaregiverTimer = Timer(Duration(minutes: state.caregiverBufferMinutes), () => _sendBackgroundSms());
   }
 
   static const _smsChannel = MethodChannel('com.aoun.app/sms');
@@ -367,7 +367,7 @@ class MedicineCubit extends Cubit<MedicineState> {
         if (await Permission.sms.request().isGranted) {
           await _smsChannel.invokeMethod('sendSMS', {
             'phone': phoneNumber,
-            'message': 'تحذير من تطبيق عوْن: كبير السن لم يقم بتأكيد أخذ جرعة الدواء في الوقت المحدد.'
+            'message': 'تحذير من تطبيق عوْن: متلقي الرعاية لم يقم بتأكيد أخذ جرعة الدواء في الوقت المحدد.'
           });
           debugPrint("تم إرسال الـ SMS بنجاح في الخلفية عبر الـ Native Channel");
         } else {
@@ -384,15 +384,15 @@ class MedicineCubit extends Cubit<MedicineState> {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         medicineName: state.activeAlarmMedicine!.name,
         timestamp: DateTime.now(),
-        takenByFather: false,
+        takenByCareRecipient: false,
         timeLabel: state.activeAlarmTimeLabel ?? 'Auto',
       ));
     }
   }
 
   Future<void> confirmDoseTaken() async {
-    _escalationFatherTimer?.cancel();
-    _escalationSonTimer?.cancel();
+    _escalationCareRecipientTimer?.cancel();
+    _escalationCaregiverTimer?.cancel();
     _snoozeTimer?.cancel(); // إلغاء أي تايمر غفوة نشط عند أخذ الدواء فعلياً
 
     // إيقاف صوت الإشعار والمنبه الحالي فوراً عند الضغط على تأكيد
@@ -423,7 +423,7 @@ class MedicineCubit extends Cubit<MedicineState> {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         medicineName: medicine.name,
         timestamp: DateTime.now(),
-        takenByFather: true,
+        takenByCareRecipient: true,
         timeLabel: state.activeAlarmTimeLabel ?? 'Manual',
       ));
     }
@@ -432,7 +432,7 @@ class MedicineCubit extends Cubit<MedicineState> {
   }
 
   void caregiverAcknowledge() {
-    _escalationSonTimer?.cancel();
+    _escalationCaregiverTimer?.cancel();
     emit(state.copyWith(isSonAlertActive: false));
   }
 
@@ -446,8 +446,8 @@ class MedicineCubit extends Cubit<MedicineState> {
     _logsSubscription?.cancel();
     _authSubscription?.cancel();
     _countdownTimer?.cancel();
-    _escalationFatherTimer?.cancel();
-    _escalationSonTimer?.cancel();
+    _escalationCareRecipientTimer?.cancel();
+    _escalationCaregiverTimer?.cancel();
     _snoozeTimer?.cancel(); // إغلاق تايمر الغفوة بأمان عند تدمير الكيوبيت
     return super.close();
   }

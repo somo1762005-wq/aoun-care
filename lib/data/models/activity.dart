@@ -5,7 +5,7 @@ class ActivityLog {
   final String userId;
   final String medicineName;
   final DateTime timestamp;
-  final bool takenByFather;
+  final bool takenByCareRecipient;
   final String timeLabel;
 
   ActivityLog({
@@ -13,7 +13,7 @@ class ActivityLog {
     this.userId = '',
     required this.medicineName,
     required this.timestamp,
-    required this.takenByFather,
+    required this.takenByCareRecipient,
     required this.timeLabel,
   });
 
@@ -22,7 +22,7 @@ class ActivityLog {
       'userId': userId,
       'medicineName': medicineName,
       'timestamp': Timestamp.fromDate(timestamp),
-      'takenByFather': takenByFather,
+      'takenByCareRecipient': takenByCareRecipient,
       'timeLabel': timeLabel,
     };
   }
@@ -42,7 +42,7 @@ class ActivityLog {
       userId: map['userId'] ?? '',
       medicineName: map['medicineName'] ?? '',
       timestamp: ts,
-      takenByFather: map['takenByFather'] ?? false,
+      takenByCareRecipient: map['takenByCareRecipient'] ?? false,
       timeLabel: map['timeLabel'] ?? '',
     );
   }

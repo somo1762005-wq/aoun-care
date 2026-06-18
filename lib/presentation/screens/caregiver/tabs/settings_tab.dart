@@ -7,6 +7,7 @@ import '../../../../core/theme.dart';
 import '../../../../logic/auth/auth_cubit.dart';
 import '../../../../logic/language/language_cubit.dart';
 import '../../../../logic/medicine/medicine_cubit.dart';
+import '../../../../data/repositories/auth_repository.dart';
 import '../../welcome_screen.dart';
 
 class SettingsTab extends StatefulWidget {
@@ -17,18 +18,21 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  int _fatherBuffer = 30;
-  int _sonBuffer = 10;
+  int _careRecipientBuffer = 30;
+  int _caregiverBuffer = 10;
   final _phoneController = TextEditingController();
+  final _linkEmailController = TextEditingController();
+  String? _linkedUserEmail;
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
     final medState = context.read<MedicineCubit>().state;
-    _fatherBuffer = medState.fatherBufferMinutes;
-    _sonBuffer = medState.sonBufferMinutes;
+    _careRecipientBuffer = medState.careRecipientBufferMinutes;
+    _caregiverBuffer = medState.caregiverBufferMinutes;
     _loadPhone();
+    _loadLinkedUser();
   }
 
   void _loadPhone() async {
@@ -40,9 +44,51 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  void _loadLinkedUser() async {
+    final linkedUserId = await context.read<AuthRepository>().getLinkedUserId();
+    if (linkedUserId != null && mounted) {
+      // For now, we'll just show that a user is linked
+      // In a real implementation, you might want to fetch the linked user's email
+      setState(() {
+        _linkedUserEmail = 'Linked user ID: $linkedUserId';
+      });
+    }
+  }
+
+  Future<void> _linkUserByEmail() async {
+    final email = _linkEmailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an email address')),
+      );
+      return;
+    }
+
+    final authRepo = context.read<AuthRepository>();
+    final userId = await authRepo.getUserIdByEmail(email);
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User not found with this email')),
+      );
+      return;
+    }
+
+    await authRepo.saveLinkedUserId(userId);
+    _loadLinkedUser();
+    _linkEmailController.clear();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Successfully linked user')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _phoneController.dispose();
+    _linkEmailController.dispose();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -93,6 +139,86 @@ class _SettingsTabState extends State<SettingsTab> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Link Care Recipient Card
+            Card(
+              elevation: 0,
+              color: isDark ? AppColors.cardDark : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.link_rounded, color: AppColors.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          langCode == 'ar' ? 'ربط متلقي الرعاية' : 'Link Care Recipient',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (_linkedUserEmail != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _linkedUserEmail!,
+                                style: const TextStyle(fontSize: 14, color: AppColors.success),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (_linkedUserEmail != null) const SizedBox(height: 12),
+                    TextField(
+                      controller: _linkEmailController,
+                      decoration: InputDecoration(
+                        hintText: langCode == 'ar' ? 'بريد إلكتروني متلقي الرعاية' : 'Care Recipient Email',
+                        prefixIcon: const Icon(Icons.email_rounded),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _linkUserByEmail,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          langCode == 'ar' ? 'ربط الحساب' : 'Link Account',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // About App Card
             Card(
               elevation: 0,
@@ -147,28 +273,28 @@ class _SettingsTabState extends State<SettingsTab> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              AppLocalization.translate('escalation_buffer_father', langCode),
+                              AppLocalization.translate('escalation_buffer_care_recipient', langCode),
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              '$_fatherBuffer ${langCode == 'ar' ? 'دقيقة' : 'min'}',
+                              '$_careRecipientBuffer ${langCode == 'ar' ? 'دقيقة' : 'min'}',
                               style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
                             )
                           ],
                         ),
                         Slider(
-                          value: _fatherBuffer.toDouble(),
+                          value: _careRecipientBuffer.toDouble(),
                           min: 1,
                           max: 60,
                           divisions: 59,
                           activeColor: AppColors.primary,
                           onChanged: (value) {
                             setState(() {
-                              _fatherBuffer = value.toInt();
+                              _careRecipientBuffer = value.toInt();
                             });
                           },
                           onChangeEnd: (value) {
-                            medCubit.updateBuffers(_fatherBuffer, _sonBuffer);
+                            medCubit.updateBuffers(_careRecipientBuffer, _caregiverBuffer);
                           },
                         ),
                       ],
@@ -181,28 +307,28 @@ class _SettingsTabState extends State<SettingsTab> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              AppLocalization.translate('escalation_buffer_son', langCode),
+                              AppLocalization.translate('escalation_buffer_caregiver', langCode),
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              '$_sonBuffer ${langCode == 'ar' ? 'دقيقة' : 'min'}',
+                              '$_caregiverBuffer ${langCode == 'ar' ? 'دقيقة' : 'min'}',
                               style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.bold),
                             )
                           ],
                         ),
                         Slider(
-                          value: _sonBuffer.toDouble(),
+                          value: _caregiverBuffer.toDouble(),
                           min: 1,
                           max: 30,
                           divisions: 29,
                           activeColor: AppColors.warning,
                           onChanged: (value) {
                             setState(() {
-                              _sonBuffer = value.toInt();
+                              _caregiverBuffer = value.toInt();
                             });
                           },
                           onChangeEnd: (value) {
-                            medCubit.updateBuffers(_fatherBuffer, _sonBuffer);
+                            medCubit.updateBuffers(_careRecipientBuffer, _caregiverBuffer);
                           },
                         ),
                       ],
@@ -226,7 +352,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 child: ExpansionTile(
                   leading: const Icon(Icons.phone_android_rounded, color: AppColors.primary),
                   title: Text(
-                    langCode == 'ar' ? 'رقم هاتف الابن للطوارئ' : 'Son\'s Emergency Phone',
+                    langCode == 'ar' ? 'رقم هاتف مقدم الرعاية للطوارئ' : 'Caregiver\'s Emergency Phone',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   childrenPadding: const EdgeInsets.all(16),
@@ -322,7 +448,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 child: ExpansionTile(
                   leading: const Icon(Icons.notification_important_rounded, color: Colors.blue),
                   title: Text(
-                    langCode == 'ar' ? 'إعدادات منبه الطوارئ الأبناء' : 'Emergency Alarm Settings',
+                    langCode == 'ar' ? 'إعدادات منبه الطوارئ' : 'Emergency Alarm Settings',
                     style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                   ),
                   initiallyExpanded: true,
@@ -375,28 +501,6 @@ class _SettingsTabState extends State<SettingsTab> {
                                 medCubit.updateAlarmSettings(tone: mappedTone);
                                 _previewTone(mappedTone);
                               },
-                            ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<int>(
-                              value: state.snoozeMinutes,
-                              decoration: InputDecoration(
-                                labelText: langCode == 'ar' ? 'وقت الغفوة/التكرار' : 'Snooze/Repeat Time',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              items: [
-                                DropdownMenuItem(value: 0, child: Text(langCode == 'ar' ? 'بدون تكرار' : 'No Snooze')),
-                                DropdownMenuItem(value: 3, child: Text(langCode == 'ar' ? 'كل 3 دقائق' : 'Every 3 min')),
-                                DropdownMenuItem(value: 5, child: Text(langCode == 'ar' ? 'كل 5 دقائق' : 'Every 5 min')),
-                                DropdownMenuItem(value: 10, child: Text(langCode == 'ar' ? 'كل 10 دقائق' : 'Every 10 min')),
-                              ],
-                              onChanged: (val) => medCubit.updateAlarmSettings(snooze: val),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeColor: Colors.blue,
-                              title: Text(langCode == 'ar' ? 'تفعيل الصوت التصاعدي' : 'Enable Ascending Volume'),
-                              value: false,
-                              onChanged: (val) {},
                             ),
                           ],
                         );

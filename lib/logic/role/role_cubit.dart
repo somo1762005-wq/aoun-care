@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/auth_repository.dart';
 
-enum UserRole { none, son, father }
+enum UserRole { none, caregiver, careRecipient }
 
 class RoleCubit extends Cubit<UserRole> {
   final AuthRepository _authRepository;
@@ -23,10 +23,10 @@ class RoleCubit extends Cubit<UserRole> {
   void _loadRole() {
     // جلب الدور دون تعطيل الـ UI
     _authRepository.getRole().then((roleStr) {
-      if (roleStr == 'son') {
-        emit(UserRole.son);
-      } else if (roleStr == 'father') {
-        emit(UserRole.father);
+      if (roleStr == 'caregiver') {
+        emit(UserRole.caregiver);
+      } else if (roleStr == 'careRecipient') {
+        emit(UserRole.careRecipient);
       } else {
         emit(UserRole.none);
       }
@@ -40,10 +40,10 @@ class RoleCubit extends Cubit<UserRole> {
     emit(role);
 
     String roleStr = 'none';
-    if (role == UserRole.son) {
-      roleStr = 'son';
-    } else if (role == UserRole.father) {
-      roleStr = 'father';
+    if (role == UserRole.caregiver) {
+      roleStr = 'caregiver';
+    } else if (role == UserRole.careRecipient) {
+      roleStr = 'careRecipient';
     }
 
     // 2. الحفظ في الخلفية تماماً وبدون استخدام كلمة await نهائياً

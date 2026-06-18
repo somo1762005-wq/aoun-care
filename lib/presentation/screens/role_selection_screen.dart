@@ -5,8 +5,8 @@ import '../../core/theme.dart';
 import '../../logic/role/role_cubit.dart';
 import '../../logic/language/language_cubit.dart';
 import '../widgets/theme_language_header.dart';
-import 'father/father_dashboard.dart';
-import 'son/son_dashboard.dart';
+import 'care_recipient/care_recipient_dashboard.dart';
+import 'caregiver/caregiver_dashboard.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -19,14 +19,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   bool _isNavigating = false;
 
   void _navigateToDashboard(BuildContext context, UserRole role) {
-    if (role == UserRole.son) {
+    if (role == UserRole.caregiver) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const SonDashboard()),
+        MaterialPageRoute(builder: (context) => const CaregiverDashboard()),
             (route) => false,
       );
-    } else if (role == UserRole.father) {
+    } else if (role == UserRole.careRecipient) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const FatherDashboard()),
+        MaterialPageRoute(builder: (context) => const CareRecipientDashboard()),
             (route) => false,
       );
     }
@@ -60,7 +60,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ),
                   const SizedBox(height: 48),
 
-                  // Caregiver Option (Son)
+                  // Caregiver Option
                   Expanded(
                     child: _buildRoleCard(
                       context: context,
@@ -70,9 +70,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       onTap: () async {
                         if (_isNavigating) return;
                         setState(() => _isNavigating = true);
-                        await roleCubit.selectRole(UserRole.son);
+                        await roleCubit.selectRole(UserRole.caregiver);
                         if (context.mounted) {
-                          _navigateToDashboard(context, UserRole.son);
+                          _navigateToDashboard(context, UserRole.caregiver);
                         }
                       },
                       isDark: isDark,
@@ -81,7 +81,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Elderly Option (Father)
+                  // Care Recipient Option
                   Expanded(
                     child: _buildRoleCard(
                       context: context,
@@ -91,9 +91,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       onTap: () async {
                         if (_isNavigating) return;
                         setState(() => _isNavigating = true);
-                        await roleCubit.selectRole(UserRole.father);
+                        await roleCubit.selectRole(UserRole.careRecipient);
                         if (context.mounted) {
-                          _navigateToDashboard(context, UserRole.father);
+                          _navigateToDashboard(context, UserRole.careRecipient);
                         }
                       },
                       isDark: isDark,

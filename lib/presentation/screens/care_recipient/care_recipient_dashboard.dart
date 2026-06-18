@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/localization.dart';
 import '../../../core/theme.dart';
 import '../../../core/services/sms_service.dart'; // استيراد خدمة الـ SMS الجديدة
-import '../../../data/repositories/auth_repository.dart'; // استيراد الـ Repository لجلب رقم الابن
+import '../../../data/repositories/auth_repository.dart'; // استيراد الـ Repository لجلب رقم مقدم الرعاية
 import '../../../logic/medicine/medicine_cubit.dart';
 import '../../../logic/language/language_cubit.dart';
 import '../../../logic/auth/auth_cubit.dart';
@@ -15,14 +15,14 @@ import '../../widgets/theme_language_header.dart';
 import '../auth_screen.dart';
 import '../role_selection_screen.dart';
 
-class FatherDashboard extends StatefulWidget {
-  const FatherDashboard({super.key});
+class CareRecipientDashboard extends StatefulWidget {
+  const CareRecipientDashboard({super.key});
 
   @override
-  State<FatherDashboard> createState() => _FatherDashboardState();
+  State<CareRecipientDashboard> createState() => _CareRecipientDashboardState();
 }
 
-class _FatherDashboardState extends State<FatherDashboard> {
+class _CareRecipientDashboardState extends State<CareRecipientDashboard> {
   StreamSubscription<Position>? _positionSubscription;
 
   @override
@@ -99,7 +99,7 @@ class _FatherDashboardState extends State<FatherDashboard> {
 
         return Scaffold(
           appBar: ThemeLanguageHeader(
-            titleKey: langCode == 'ar' ? 'واجهة الأب' : 'father_dashboard',
+            titleKey: 'care_recipient_title',
             extraActions: [
               IconButton(
                 icon: const Icon(Icons.swap_horiz_rounded),
@@ -151,7 +151,7 @@ class _FatherDashboardState extends State<FatherDashboard> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    langCode == 'ar' ? 'مرحبًا بالوالد العزيز' : 'Welcome Dear Father',
+                                    langCode == 'ar' ? 'مرحبًا بك متلقي الرعاية' : 'Welcome Care Recipient',
                                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                   ),
                                   Text(
@@ -223,22 +223,22 @@ class _FatherDashboardState extends State<FatherDashboard> {
                                 GestureDetector(
                                   onTap: () async {
                                     final authRepo = context.read<AuthRepository>();
-                                    String? sonPhone = await authRepo.getEmergencyPhone();
+                                    String? caregiverPhone = await authRepo.getEmergencyPhone();
 
-                                    if (sonPhone != null && sonPhone.isNotEmpty) {
+                                    if (caregiverPhone != null && caregiverPhone.isNotEmpty) {
                                       await SmsService.sendEmergencySms(
-                                        phoneNumber: sonPhone,
+                                        phoneNumber: caregiverPhone,
                                         message: langCode == 'ar'
-                                            ? "🚨 نداء استغاثة عاجل من الوالد! أنا أحتاج المساعدة فوراً، الرجاء القدوم أو الاتصال بي. 🚨"
-                                            : "🚨 Urgent emergency appeal from Father! I need help immediately, please come or call me. 🚨",
+                                            ? "🚨 نداء استغاثة عاجل من متلقي الرعاية! أنا أحتاج المساعدة فوراً، الرجاء القدوم أو الاتصال بي. 🚨"
+                                            : "🚨 Urgent emergency appeal from Care Recipient! I need help immediately, please come or call me. 🚨",
                                       );
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             langCode == 'ar'
-                                                ? 'الرجاء إضافة رقم هاتف الابن في الإعدادات أولاً!'
-                                                : 'Please add the son\'s phone number in settings first!',
+                                                ? 'الرجاء إضافة رقم هاتف مقدم الرعاية في الإعدادات أولاً!'
+                                                : 'Please add the caregiver\'s phone number in settings first!',
                                           ),
                                         ),
                                       );
@@ -302,7 +302,7 @@ class _FatherDashboardState extends State<FatherDashboard> {
                         const SizedBox(height: 32),
                         Text(
                           langCode == 'ar'
-                              ? "الوالد العزيز حان موعد جرعتك\nاضغط هنا للتأكيد"
+                              ? "حان موعد جرعتك\nاضغط هنا للتأكيد"
                               : AppLocalization.translate('time_to_take_medicine', langCode),
                           textAlign: TextAlign.center,
                           style: const TextStyle(

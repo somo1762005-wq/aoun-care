@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,9 +15,11 @@ class NotificationService {
   static const String _defaultIcon = '@mipmap/launcher_icon';
   static const String _alertsChannelId = 'aoun_channel';
   static const String _alarmChannelId = 'alarm_channel_high_priority';
+  static const String _alarmMethodChannel = 'com.aoun.app/alarm';
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static const MethodChannel _alarmChannel = MethodChannel(_alarmMethodChannel);
 
   bool _isInitialized = false;
 
@@ -188,6 +191,38 @@ class NotificationService {
       }
     } catch (e) {
       debugPrint("Error uploading FCM token: $e");
+    }
+  }
+
+  Future<void> startAlarmForegroundService({
+    required String title,
+    required String body,
+    required String tone,
+    required bool vibration,
+  }) async {
+    if (!Platform.isAndroid) return;
+    
+    try {
+      await _alarmChannel.invokeMethod('startAlarm', {
+        'title': title,
+        'body': body,
+        'tone': tone,
+        'vibration': vibration,
+      });
+      debugPrint("Alarm foreground service started");
+    } catch (e) {
+      debugPrint("Error starting alarm foreground service: $e");
+    }
+  }
+
+  Future<void> stopAlarmForegroundService() async {
+    if (!Platform.isAndroid) return;
+    
+    try {
+      await _alarmChannel.invokeMethod('stopAlarm');
+      debugPrint("Alarm foreground service stopped");
+    } catch (e) {
+      debugPrint("Error stopping alarm foreground service: $e");
     }
   }
 }

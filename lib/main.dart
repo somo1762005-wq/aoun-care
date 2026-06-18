@@ -16,8 +16,8 @@ import 'logic/medicine/medicine_cubit.dart';
 import 'logic/navigation/navigation_cubit.dart';
 import 'presentation/screens/welcome_screen.dart';
 import 'presentation/screens/role_selection_screen.dart';
-import 'presentation/screens/father/father_dashboard.dart';
-import 'presentation/screens/son/son_dashboard.dart';
+import 'presentation/screens/care_recipient/care_recipient_dashboard.dart';
+import 'presentation/screens/caregiver/caregiver_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -136,10 +136,10 @@ class AuthWrapper extends StatelessWidget {
             builder: (context, roleState) {
               if (roleState == UserRole.none) {
                 return const RoleSelectionScreen();
-              } else if (roleState == UserRole.son) {
-                return const SonDashboard();
-              } else if (roleState == UserRole.father) {
-                return const FatherDashboard();
+              } else if (roleState == UserRole.caregiver) {
+                return const CaregiverDashboard();
+              } else if (roleState == UserRole.careRecipient) {
+                return const CareRecipientDashboard();
               }
               return const RoleSelectionScreen();
             },

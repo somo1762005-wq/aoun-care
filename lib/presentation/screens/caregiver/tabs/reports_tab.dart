@@ -56,16 +56,16 @@ class ReportsTab extends StatelessWidget {
                                       width: 32,
                                       height: 32,
                                       decoration: BoxDecoration(
-                                        color: log.takenByFather 
+                                        color: log.takenByCareRecipient 
                                             ? AppColors.success.withValues(alpha: 0.15) 
                                             : AppColors.error.withValues(alpha: 0.15),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
-                                        log.takenByFather 
+                                        log.takenByCareRecipient 
                                             ? Icons.check_circle_rounded 
                                             : Icons.cancel_rounded,
-                                        color: log.takenByFather ? AppColors.success : AppColors.error,
+                                        color: log.takenByCareRecipient ? AppColors.success : AppColors.error,
                                         size: 20,
                                       ),
                                     ),
@@ -98,7 +98,7 @@ class ReportsTab extends StatelessWidget {
                                         children: [
                                           Text(
                                             AppLocalization.translate(
-                                              log.takenByFather ? 'taken_log' : 'missed_log',
+                                              log.takenByCareRecipient ? 'taken_log' : 'missed_log',
                                               langCode,
                                               arguments: {
                                                 'name': log.medicineName,

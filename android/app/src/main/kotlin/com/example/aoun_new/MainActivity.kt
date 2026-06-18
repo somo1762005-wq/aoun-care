@@ -1,6 +1,7 @@
 package com.example.aoun_new
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     companion object {
         private const val SMS_CHANNEL = "com.aoun.app/sms"
+        private const val ALARM_CHANNEL = "com.aoun.app/alarm"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -23,6 +25,21 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "sendSMS" -> sendSms(call.argument("phone"), call.argument("message"), result)
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startAlarm" -> startAlarmForegroundService(
+                        call.argument("title"),
+                        call.argument("body"),
+                        call.argument("tone"),
+                        call.argument("vibration"),
+                        result
+                    )
+                    "stopAlarm" -> stopAlarmForegroundService(result)
                     else -> result.notImplemented()
                 }
             }
@@ -53,6 +70,36 @@ class MainActivity : FlutterActivity() {
             result.success("SMS sent successfully")
         } catch (e: Exception) {
             result.error("SMS_FAILED", e.message ?: "Failed to send SMS", null)
+        }
+    }
+
+    private fun startAlarmForegroundService(
+        title: String?,
+        body: String?,
+        tone: String?,
+        vibration: Boolean?,
+        result: MethodChannel.Result
+    ) {
+        try {
+            AlarmForegroundService.startService(
+                this,
+                title ?: "Medicine Alarm",
+                body ?: "Time to take your medicine",
+                tone ?: "default",
+                vibration ?: true
+            )
+            result.success("Alarm service started")
+        } catch (e: Exception) {
+            result.error("ALARM_FAILED", e.message ?: "Failed to start alarm service", null)
+        }
+    }
+
+    private fun stopAlarmForegroundService(result: MethodChannel.Result) {
+        try {
+            AlarmForegroundService.stopService(this)
+            result.success("Alarm service stopped")
+        } catch (e: Exception) {
+            result.error("ALARM_STOP_FAILED", e.message ?: "Failed to stop alarm service", null)
         }
     }
 

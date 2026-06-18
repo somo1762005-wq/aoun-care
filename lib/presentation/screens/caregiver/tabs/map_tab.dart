@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart'; // تم إضافة الاستي
 import '../../../../core/localization.dart';
 import '../../../../core/theme.dart';
 import '../../../../logic/language/language_cubit.dart';
+import '../../../../data/repositories/auth_repository.dart';
 
 class MapTab extends StatefulWidget {
   const MapTab({super.key});
@@ -45,15 +46,20 @@ class _MapTabState extends State<MapTab> {
     super.dispose();
   }
 
-  void _startLocationStreaming() {
+  void _startLocationStreaming() async {
     setState(() {
       _isLocating = true;
     });
 
     final user = FirebaseAuth.instance.currentUser;
+    final authRepo = context.read<AuthRepository>();
+    final linkedUserId = await authRepo.getLinkedUserId();
 
     if (_isFirebaseEnabled && user != null) {
-      final docRef = fs.FirebaseFirestore.instance.collection('users').doc(user.uid);
+      // Use linked user ID if available (caregiver viewing care recipient's location)
+      // Otherwise use current user ID
+      final targetUserId = linkedUserId ?? user.uid;
+      final docRef = fs.FirebaseFirestore.instance.collection('users').doc(targetUserId);
       _locationSubscription = docRef.snapshots().listen((snapshot) {
         if (snapshot.exists && snapshot.data() != null) {
           final data = snapshot.data() as Map<String, dynamic>;
@@ -78,7 +84,7 @@ class _MapTabState extends State<MapTab> {
           }
         }
       }, onError: (err) {
-        debugPrint("Error listening to father location: $err");
+        debugPrint("Error listening to care recipient location: $err");
         if (mounted) {
           setState(() {
             _isLocating = false;
@@ -152,7 +158,7 @@ class _MapTabState extends State<MapTab> {
 
   // الدالة الجديدة لفتح تطبيق خرائط جوجل وحساب وقت الوصول والاتجاهات حركياً
   Future<void> _openGoogleMapsDirections() async {
-    // رابط يوجه تطبيق الخرائط لتحديد مسار قيادة مباشرة إلى موقع الأب الحالي
+    // رابط يوجه تطبيق الخرائط لتحديد مسار قيادة مباشرة إلى موقع متلقي الرعاية الحالي
     final Uri googleMapsUrl = Uri.parse(
         'https://www.google.com/maps/dir/?api=1&destination=$_lat,$_lng&travelmode=driving'
     );
@@ -270,7 +276,7 @@ class _MapTabState extends State<MapTab> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            langCode == 'ar' ? 'موقع الأب الحالي' : 'Father\'s Position',
+                            langCode == 'ar' ? 'موقع متلقي الرعاية الحالي' : 'Care Recipient\'s Position',
                             style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         )
@@ -312,7 +318,7 @@ class _MapTabState extends State<MapTab> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  AppLocalization.translate('father_coordinates', langCode),
+                  AppLocalization.translate('care_recipient_coordinates', langCode),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),

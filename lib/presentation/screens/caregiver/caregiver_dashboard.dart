@@ -12,8 +12,8 @@ import 'tabs/reports_tab.dart';
 import 'tabs/map_tab.dart';
 import 'tabs/settings_tab.dart';
 
-class SonDashboard extends StatelessWidget {
-  const SonDashboard({super.key});
+class CaregiverDashboard extends StatelessWidget {
+  const CaregiverDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +31,7 @@ class SonDashboard extends StatelessWidget {
       builder: (context, activeIndex) {
         return Scaffold(
           appBar: ThemeLanguageHeader(
-            titleKey: 'son_title',
+            titleKey: 'caregiver_title',
             extraActions: [
               IconButton(
                 icon: const Icon(Icons.swap_horiz_rounded),
@@ -50,7 +50,7 @@ class SonDashboard extends StatelessWidget {
             builder: (context, medState) {
               return Column(
                 children: [
-                  // 1. تنبيه فوري لواجهة الابن عند انتهاء مهلة الأب
+                  // 1. تنبيه فوري لواجهة مقدم الرعاية عند انتهاء مهلة متلقي الرعاية
                   if (medState.isSonAlertActive)
                     Container(
                       color: AppColors.error,
@@ -62,8 +62,8 @@ class SonDashboard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               langCode == 'ar'
-                                  ? ' تحذير: كبير السن لم يأخذ الجرعة في الوقت المحدد!'
-                                  : ' Alert: Father did not confirm taking the dose on time!',
+                                  ? ' تحذير: متلقي الرعاية لم يأخذ الجرعة في الوقت المحدد!'
+                                  : ' Alert: Care Recipient did not confirm taking the dose on time!',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

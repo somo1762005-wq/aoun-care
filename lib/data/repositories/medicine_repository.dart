@@ -23,8 +23,8 @@ class MedicineRepository {
 
   static const String keyMedicinesJson = 'cached_medicines';
   static const String keyLogsJson = 'cached_logs';
-  static const String keyFatherBuffer = 'father_buffer_minutes';
-  static const String keySonBuffer = 'son_buffer_minutes';
+  static const String keyCareRecipientBuffer = 'care_recipient_buffer_minutes';
+  static const String keyCaregiverBuffer = 'caregiver_buffer_minutes';
   static const String keyAlarmVolume = 'alarm_volume';
   static const String keyAlarmTone = 'alarm_tone';
   static const String keyAlarmSnooze = 'alarm_snooze';
@@ -83,8 +83,9 @@ class MedicineRepository {
         debugPrint("Starting real-time Firestore sync for user: $userId");
 
         _firestoreMedsSub = _firestore!
+            .collection('users')
+            .doc(userId)
             .collection('medicines')
-            .where('userId', isEqualTo: userId)
             .snapshots()
             .listen((snapshot) {
           final medicines = snapshot.docs.map((doc) {
@@ -97,8 +98,9 @@ class MedicineRepository {
         });
 
         _firestoreLogsSub = _firestore!
+            .collection('users')
+            .doc(userId)
             .collection('activities')
-            .where('userId', isEqualTo: userId)
             .orderBy('timestamp', descending: true)
             .snapshots()
             .listen((snapshot) {
@@ -152,8 +154,7 @@ class MedicineRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (_isFirebaseEnabled && _firestore != null && user != null) {
       final medData = medicine.toMap();
-      medData['userId'] = user.uid;
-      await _firestore!.collection('medicines').add(medData);
+      await _firestore!.collection('users').doc(user.uid).collection('medicines').add(medData);
     } else {
       _localMedicines.add(medicine);
       _medicinesController.add(_localMedicines);
@@ -164,8 +165,7 @@ class MedicineRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (_isFirebaseEnabled && _firestore != null && user != null) {
       final medData = medicine.toMap();
-      medData['userId'] = user.uid;
-      await _firestore!.collection('medicines').doc(medicine.id).update(medData);
+      await _firestore!.collection('users').doc(user.uid).collection('medicines').doc(medicine.id).update(medData);
     } else {
       final index = _localMedicines.indexWhere((m) => m.id == medicine.id);
       if (index != -1) {
@@ -176,8 +176,9 @@ class MedicineRepository {
   }
 
   Future<void> deleteMedicine(String id) async {
-    if (_isFirebaseEnabled && _firestore != null) {
-      await _firestore!.collection('medicines').doc(id).delete();
+    final user = FirebaseAuth.instance.currentUser;
+    if (_isFirebaseEnabled && _firestore != null && user != null) {
+      await _firestore!.collection('users').doc(user.uid).collection('medicines').doc(id).delete();
     } else {
       _localMedicines.removeWhere((m) => m.id == id);
       _medicinesController.add(_localMedicines);
@@ -188,24 +189,23 @@ class MedicineRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (_isFirebaseEnabled && _firestore != null && user != null) {
       final logData = log.toMap();
-      logData['userId'] = user.uid;
-      await _firestore!.collection('activities').add(logData);
+      await _firestore!.collection('users').doc(user.uid).collection('activities').add(logData);
     } else {
       _localLogs.insert(0, log);
       _logsController.add(_localLogs);
     }
   }
 
-  Future<void> saveBuffers(int fatherMins, int sonMins) async {
+  Future<void> saveBuffers(int careRecipientMins, int caregiverMins) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(keyFatherBuffer, fatherMins);
-    await prefs.setInt(keySonBuffer, sonMins);
+    await prefs.setInt(keyCareRecipientBuffer, careRecipientMins);
+    await prefs.setInt(keyCaregiverBuffer, caregiverMins);
 
     final user = FirebaseAuth.instance.currentUser;
     if (_isFirebaseEnabled && _firestore != null && user != null) {
       await _firestore!.collection('users').doc(user.uid).set({
-        'father_buffer': fatherMins,
-        'son_buffer': sonMins,
+        'care_recipient_buffer': careRecipientMins,
+        'caregiver_buffer': caregiverMins,
       }, fs.SetOptions(merge: true));
     }
   }
@@ -217,12 +217,12 @@ class MedicineRepository {
         final doc = await _firestore!.collection('users').doc(user.uid).get();
         if (doc.exists) {
           final data = doc.data();
-          if (data != null && data.containsKey('father_buffer')) {
-            final f = data['father_buffer'] as int;
-            final s = data['son_buffer'] as int;
+          if (data != null && (data.containsKey('care_recipient_buffer') || data.containsKey('father_buffer'))) {
+            final f = data['care_recipient_buffer'] ?? data['father_buffer'] as int;
+            final s = data['caregiver_buffer'] ?? data['son_buffer'] as int;
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setInt(keyFatherBuffer, f);
-            await prefs.setInt(keySonBuffer, s);
+            await prefs.setInt(keyCareRecipientBuffer, f);
+            await prefs.setInt(keyCaregiverBuffer, s);
             return {'father': f, 'son': s};
           }
         }
@@ -233,8 +233,8 @@ class MedicineRepository {
 
     final prefs = await SharedPreferences.getInstance();
     return {
-      'father': prefs.getInt(keyFatherBuffer) ?? 30,
-      'son': prefs.getInt(keySonBuffer) ?? 10,
+      'father': prefs.getInt(keyCareRecipientBuffer) ?? 30,
+      'son': prefs.getInt(keyCaregiverBuffer) ?? 10,
     };
   }
 

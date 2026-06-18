@@ -32,8 +32,9 @@ class AuthRepository {
 
   static const String keyRole = 'user_role';
   static const String keyEmail = 'user_email';
-  static const String keyPhone = 'son_phone';
+  static const String keyPhone = 'caregiver_phone';
   static const String keyIsLoggedIn = 'is_logged_in';
+  static const String keyLinkedUserId = 'linked_user_id';
 
   // مفاتيح جديدة لحفظ بيانات الدخول بصفة دائمة حتى بعد تسجيل الخروج أو حذف التطبيق
   static const String keySavedEmail = 'saved_user_email';
@@ -88,6 +89,7 @@ class AuthRepository {
         if (data != null) {
           if (data['role'] != null) await prefs.setString(keyRole, data['role']);
           if (data['phone'] != null) await prefs.setString(keyPhone, data['phone']);
+          if (data['linked_user_id'] != null) await prefs.setString(keyLinkedUserId, data['linked_user_id']);
           await prefs.setString(keyEmail, user.email ?? '');
           await prefs.setBool(keyIsLoggedIn, true);
         }
@@ -287,5 +289,62 @@ class AuthRepository {
 
   Future<bool> isEmailVerified() async {
     return true;
+  }
+
+  Future<void> saveLinkedUserId(String linkedUserId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(keyLinkedUserId, linkedUserId);
+
+    if (_isFirebaseEnabled && _firebaseAuth != null) {
+      final user = _firebaseAuth!.currentUser;
+      if (user != null) {
+        await _firestore?.collection('users').doc(user.uid).set({
+          'linked_user_id': linkedUserId,
+        }, fs.SetOptions(merge: true));
+      }
+    }
+  }
+
+  Future<String?> getLinkedUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final localLinkedUserId = prefs.getString(keyLinkedUserId);
+
+    if (_isFirebaseEnabled && _firebaseAuth != null) {
+      final user = _firebaseAuth!.currentUser;
+      if (user != null) {
+        try {
+          final doc = await _firestore?.collection('users').doc(user.uid).get();
+          if (doc != null && doc.exists) {
+            final linkedUserId = doc.data()?['linked_user_id'] as String?;
+            if (linkedUserId != null) {
+              await prefs.setString(keyLinkedUserId, linkedUserId);
+              return linkedUserId;
+            }
+          }
+        } catch (e) {
+          debugPrint("Error fetching linked user ID from Firestore: $e");
+        }
+      }
+    }
+    return localLinkedUserId;
+  }
+
+  Future<String?> getUserIdByEmail(String email) async {
+    if (_isFirebaseEnabled && _firestore != null) {
+      try {
+        final querySnapshot = await _firestore!
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        
+        if (querySnapshot.docs.isNotEmpty) {
+          return querySnapshot.docs.first.id;
+        }
+      } catch (e) {
+        debugPrint("Error finding user by email: $e");
+      }
+    }
+    return null;
   }
 }

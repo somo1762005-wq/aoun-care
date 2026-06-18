@@ -4,8 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../logic/medicine/medicine_cubit.dart';
-import '../../../core/services/sms_service.dart'; // استيراد خدمة الـ SMS
-import '../../../data/repositories/auth_repository.dart'; // استيراد الـ Repository لجلب رقم الابن
+import '../../../core/services/sms_service.dart';
+import '../../../core/notification_service.dart';
+import '../../../data/repositories/auth_repository.dart';
 
 class AlarmScreen extends StatefulWidget {
   const AlarmScreen({super.key});
@@ -23,9 +24,10 @@ class _AlarmScreenState extends State<AlarmScreen> {
   void initState() {
     super.initState();
     _fetchDelayAndStartTimer();
+    _startForegroundAlarm();
   }
 
-  /// جلب المهلة الديناميكية التي حددها الابن في الإعدادات من الـ Firestore
+  /// جلب المهلة الديناميكية التي حددها مقدم الرعاية في الإعدادات من الـ Firestore
   Future<void> _fetchDelayAndStartTimer() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -33,7 +35,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (doc.exists && doc.data()?['safety_delay_minutes'] != null) {
           setState(() {
-            // قم بتغيير 'safety_delay_minutes' إلى الحقل الحقيقي الذي يحفظ فيه الابن المهلة
+            // قم بتغيير 'safety_delay_minutes' إلى الحقل الحقيقي الذي يحفظ فيه مقدم الرعاية المهلة
             _delayMinutes = doc.data()?['safety_delay_minutes'] as int;
           });
         }
@@ -50,22 +52,22 @@ class _AlarmScreenState extends State<AlarmScreen> {
       final medicineState = context.read<MedicineCubit>().state;
       final medicine = medicineState.activeAlarmMedicine;
 
-      // إذا لم يضغط الوالد على أي زر، والمنبه ما زال نشطاً
+      // إذا لم يضغط متلقي الرعاية على أي زر، والمنبه ما زال نشطاً
       if (!_isActionTaken && medicine != null) {
         final authRepo = context.read<AuthRepository>();
-        String? sonPhone = await authRepo.getEmergencyPhone();
+        String? caregiverPhone = await authRepo.getEmergencyPhone();
 
-        if (sonPhone != null && sonPhone.isNotEmpty) {
+        if (caregiverPhone != null && caregiverPhone.isNotEmpty) {
           await SmsService.sendEmergencySms(
-            phoneNumber: sonPhone,
-            message: "⚠️ تنبيه أمان من تطبيق عون: مرت ($_delayMinutes) دقائق ولم يقم الوالد بتأكيد أخذ جرعة دواء (${medicine.name}). الرجاء الاطمئنان عليه فوراً.",
+            phoneNumber: caregiverPhone,
+            message: "⚠️ تنبيه أمان من تطبيق عون: مرت ($_delayMinutes) دقائق ولم يقم متلقي الرعاية بتأكيد أخذ جرعة دواء (${medicine.name}). الرجاء الاطمئنان عليه فوراً.",
           );
         }
       }
     });
   }
 
-  /// إيقاف المؤقت فوراً عند استجابة الوالد
+  /// إيقاف المؤقت فوراً عند استجابة متلقي الرعاية
   void _cancelTimer() {
     setState(() {
       _isActionTaken = true;
@@ -73,9 +75,30 @@ class _AlarmScreenState extends State<AlarmScreen> {
     _safetyTimer?.cancel();
   }
 
+  /// بدء خدمة الخلفية للمنبه
+  Future<void> _startForegroundAlarm() async {
+    final state = context.read<MedicineCubit>().state;
+    final medicine = state.activeAlarmMedicine;
+    
+    if (medicine != null) {
+      await NotificationService().startAlarmForegroundService(
+        title: 'حان موعد دواء',
+        body: medicine.name,
+        tone: state.alarmTone,
+        vibration: state.isVibrationEnabled,
+      );
+    }
+  }
+
+  /// إيقاف خدمة الخلفية للمنبه
+  Future<void> _stopForegroundAlarm() async {
+    await NotificationService().stopAlarmForegroundService();
+  }
+
   @override
   void dispose() {
-    _safetyTimer?.cancel(); // تنظيف الذاكرة
+    _safetyTimer?.cancel();
+    _stopForegroundAlarm();
     super.dispose();
   }
 
@@ -138,8 +161,9 @@ class _AlarmScreenState extends State<AlarmScreen> {
                   child: Column(
                     children: [
                       ElevatedButton(
-                        onPressed: () {
-                          _cancelTimer(); // إلغاء الـ SMS التلقائي فوراً
+                        onPressed: () async {
+                          _cancelTimer();
+                          await _stopForegroundAlarm();
                           context.read<MedicineCubit>().confirmDoseTaken();
                         },
                         style: ElevatedButton.styleFrom(
@@ -157,8 +181,9 @@ class _AlarmScreenState extends State<AlarmScreen> {
                       ),
                       const SizedBox(height: 20),
                       TextButton(
-                        onPressed: () {
-                          _cancelTimer(); // إلغاء الـ SMS التلقائي لأن الوالد أجل المنبه بوعيه
+                        onPressed: () async {
+                          _cancelTimer();
+                          await _stopForegroundAlarm();
                           context.read<MedicineCubit>().caregiverAcknowledge();
                           Navigator.of(context).pop();
                         },
@@ -167,7 +192,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
                           minimumSize: const Size(double.infinity, 60),
                         ),
                         child: const Text(
-                          'تأجيل المنبه (Snooze)',
+                          'إلغاء المنبه',
                           style: TextStyle(fontSize: 20, decoration: TextDecoration.underline),
                         ),
                       ),
