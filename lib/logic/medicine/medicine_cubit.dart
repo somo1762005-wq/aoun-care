@@ -152,6 +152,24 @@ class MedicineCubit extends Cubit<MedicineState> {
     });
   }
 
+  Future<void> snoozeAlarm() async {
+    _escalationFatherTimer?.cancel();
+    _escalationSonTimer?.cancel();
+
+    // يمكنك إضافة منطق إضافي هنا لتأجيل المنبه، مثل إعادة جدولة إشعار محلي
+    // أو تحديث حالة الكيوبيت لتعكس أن المنبه في وضع التأجيل.
+    // حالياً، سنقوم فقط بإلغاء المؤقتات وإعادة حساب الجرعة التالية.
+
+    emit(state.copyWith(
+      isAlarmActive: false,
+      isSonAlertActive: false,
+      isSmsSent: false,
+      activeAlarmMedicine: null,
+      activeAlarmTimeLabel: null,
+    ));
+    _recalculateNextDose();
+  }
+
   Future<void> _loadBuffers() async {
     final buffers = await _medicineRepository.getBuffers();
     final prefs = await SharedPreferences.getInstance();
